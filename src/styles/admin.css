@@ -1,0 +1,367 @@
+/* Admin page specific styles */
+.admin-page .page-header {
+  margin-bottom: 16px;
+}
+
+/* Grid editor (for grilles) */
+.grid-editor {
+  display: flex;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.grid-editor .grid-canvas {
+  display: grid;
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.grid-editor .grid-cell {
+  width: 32px;
+  height: 32px;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 10px;
+  user-select: none;
+}
+
+.grid-editor .grid-cell.obstacle-cell {
+  background: #555;
+}
+
+.grid-editor .grid-cell.spawn-player {
+  background: rgba(33, 150, 243, 0.4);
+}
+
+.grid-editor .grid-cell.spawn-enemy {
+  background: rgba(233, 69, 96, 0.4);
+}
+
+.grid-editor .grid-cell:hover {
+  outline: 1px solid var(--primary);
+}
+
+.grid-editor .toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.grid-editor .tool-btn {
+  padding: 6px 12px;
+  background: var(--bg-light);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.grid-editor .tool-btn.active {
+  border-color: var(--primary);
+  background: rgba(233, 69, 96, 0.2);
+}
+
+/* Relation management */
+.relation-section {
+  margin-top: 16px;
+  padding: 12px;
+  background: var(--bg-light);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.relation-section h4 {
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.relation-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.relation-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 8px;
+  background: var(--bg);
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+/* Tabs */
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+}
+
+.tab-btn {
+  padding: 6px 16px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px 4px 0 0;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.15s;
+}
+
+.tab-btn:hover {
+  color: var(--text);
+  background: rgba(255,255,255,0.05);
+}
+
+.tab-btn.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: white;
+}
+
+/* Detail panel (monster detail, character detail) */
+.detail-panel {
+  margin-top: 20px;
+  padding: 20px;
+  background: var(--bg-light);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.detail-panel h3 {
+  color: var(--primary);
+  margin-bottom: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.detail-sections {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.detail-section {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px;
+}
+
+.detail-section h4 {
+  font-size: 13px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+  letter-spacing: 0.5px;
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+}
+
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 8px;
+  background: var(--bg-light);
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.stat-row .stat-label {
+  color: var(--text-muted);
+  text-transform: uppercase;
+  font-size: 11px;
+}
+
+.stat-row .stat-value {
+  font-weight: bold;
+}
+
+.stat-row .stat-bonus {
+  color: var(--success);
+  font-size: 11px;
+  margin-left: 4px;
+}
+
+/* Sort list (spells in detail panels) */
+.sort-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sort-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 10px;
+  background: var(--bg-light);
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.sort-item .sort-name {
+  font-weight: 600;
+}
+
+.sort-item .sort-meta {
+  display: flex;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.sort-item .sort-meta span {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* Effect badges inline */
+.effect-badges {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.effect-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.effect-badge.buff {
+  background: rgba(76, 175, 80, 0.3);
+  color: var(--success);
+}
+
+.effect-badge.debuff {
+  background: rgba(233, 69, 96, 0.3);
+  color: var(--danger);
+}
+
+/* Equipment grid */
+.equipment-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.equip-slot {
+  background: var(--bg-light);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px;
+  text-align: center;
+  min-height: 80px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+}
+
+.equip-slot .slot-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+}
+
+.equip-slot .slot-item {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--info);
+}
+
+.equip-slot .slot-empty {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.equip-slot select {
+  width: 100%;
+  padding: 4px 6px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.equip-slot .btn {
+  font-size: 11px;
+  padding: 2px 8px;
+}
+
+/* Character detail page */
+.char-detail {
+  margin-top: 24px;
+}
+
+.char-detail h2 {
+  margin-bottom: 4px;
+}
+
+.char-detail .char-meta {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
+.char-detail .section-title {
+  font-size: 16px;
+  color: var(--primary);
+  margin: 20px 0 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Inline add form (for adding sorts to monsters) */
+.inline-add {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.inline-add select,
+.inline-add input {
+  padding: 4px 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 12px;
+}
+
+/* Clickable table rows */
+.data-table tr.clickable {
+  cursor: pointer;
+}
+
+.data-table tr.clickable:hover td {
+  background: rgba(233, 69, 96, 0.1);
+}
+
+.data-table tr.row-selected td {
+  background: rgba(233, 69, 96, 0.15);
+  border-color: var(--primary);
+}
