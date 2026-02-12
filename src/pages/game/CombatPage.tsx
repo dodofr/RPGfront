@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { combatApi } from '../../api/combat';
-import type { CombatState, CombatEntity, CombatCase, Sort, EffetActif, ZoneType } from '../../types';
+import { zonesApi } from '../../api/static';
+import type { CombatState, CombatEntity, CombatCase, Sort, EffetActif, ZoneType, Zone, CombatLogEntry } from '../../types';
 import {
   getReachableCells,
   getCellsInRange,
@@ -41,6 +42,11 @@ const ZONE_LABELS: Record<string, string> = {
   CERCLE: 'Cercle',
   LIGNE: 'Ligne',
   CONE: 'Cône',
+  LIGNE_PERPENDICULAIRE: 'Ligne perp.',
+  DIAGONALE: 'Diagonale',
+  CARRE: 'Carré',
+  ANNEAU: 'Anneau',
+  CONE_INVERSE: 'Cône inv.',
 };
 
 const CombatPage: React.FC = () => {
@@ -51,14 +57,20 @@ const CombatPage: React.FC = () => {
   const [selectedSort, setSelectedSort] = useState<Sort | null>(null);
   const [weaponMode, setWeaponMode] = useState(false);
   const [moveMode, setMoveMode] = useState(false);
-  const [log, setLog] = useState<string[]>([]);
+  const [log, setLog] = useState<CombatLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [combatList, setCombatList] = useState<CombatState[]>([]);
   const [hoveredCell, setHoveredCell] = useState<{ x: number; y: number } | null>(null);
+  const [zones, setZones] = useState<Zone[]>([]);
   const logRef = useRef<HTMLDivElement>(null);
-  const prevEffectsRef = useRef<EffetActif[]>([]);
+  const lastLogIdRef = useRef<number>(0);
 
   const combatId = id ? parseInt(id) : null;
+
+  // Fetch zones for weapon AoE resolution
+  useEffect(() => {
+    zonesApi.getAll().then(setZones);
+  }, []);
 
   // Fetch combat list if no ID
   useEffect(() => {
@@ -72,56 +84,17 @@ const CombatPage: React.FC = () => {
     if (!combatId) return;
     try {
       const data = await combatApi.getById(combatId);
-      setCombat(prev => {
-        if (prev && prev.entiteActuelle !== data.entiteActuelle) {
-          const entity = data.entites.find(e => e.id === data.entiteActuelle);
-          if (entity) {
-            setLog(l => [...l, `Tour ${data.tourActuel}: ${entity.nom} joue`]);
-          }
-        }
-        if (prev) {
-          data.entites.forEach(e => {
-            const prevE = prev.entites.find(pe => pe.id === e.id);
-            if (prevE && prevE.pvActuels !== e.pvActuels) {
-              const diff = e.pvActuels - prevE.pvActuels;
-              if (diff < 0) {
-                setLog(l => [...l, `${e.nom} subit ${Math.abs(diff)} degats (${e.pvActuels}/${e.pvMax} PV)`]);
-              } else if (diff > 0) {
-                setLog(l => [...l, `${e.nom} recupere ${diff} PV (${e.pvActuels}/${e.pvMax} PV)`]);
-              }
-            }
-            if (prevE && prevE.pvActuels > 0 && e.pvActuels <= 0) {
-              setLog(l => [...l, `${e.nom} est mort!`]);
-            }
-          });
+      setCombat(data);
 
-          // Detect new effects applied
-          const prevEffects = prevEffectsRef.current;
-          const newEffects = data.effetsActifs.filter(
-            ef => !prevEffects.some(pe => pe.id === ef.id)
-          );
-          newEffects.forEach(ef => {
-            const target = data.entites.find(e => e.id === ef.entiteId);
-            if (target) {
-              const sign = ef.type === 'BUFF' ? '+' : '';
-              setLog(l => [...l, `${target.nom}: ${ef.nom} (${STAT_LABELS[ef.statCiblee] || ef.statCiblee} ${sign}${ef.valeur}, ${ef.toursRestants}t)`]);
-            }
-          });
-
-          // Detect expired effects
-          const removedEffects = prevEffects.filter(
-            pe => !data.effetsActifs.some(ef => ef.id === pe.id)
-          );
-          removedEffects.forEach(ef => {
-            const target = data.entites.find(e => e.id === ef.entiteId);
-            if (target && target.pvActuels > 0) {
-              setLog(l => [...l, `${target.nom}: ${ef.nom} expire`]);
-            }
-          });
+      // Append new logs from backend
+      if (data.logs) {
+        const newLogs = data.logs.filter(l => l.id > lastLogIdRef.current);
+        if (newLogs.length > 0) {
+          setLog(prev => [...prev, ...newLogs]);
+          lastLogIdRef.current = newLogs[newLogs.length - 1].id;
         }
-        prevEffectsRef.current = data.effetsActifs;
-        return data;
-      });
+      }
+
       setLoading(false);
     } catch {
       setLoading(false);
@@ -188,6 +161,7 @@ const CombatPage: React.FC = () => {
 
   // ArmeData helper
   const armeData = currentEntity?.armeData ? currentEntity.armeData as unknown as ArmeData : null;
+  const armeZone = armeData?.zoneId ? zones.find(z => z.id === armeData.zoneId) ?? null : null;
 
   // --- Preview computations ---
 
@@ -275,8 +249,7 @@ const CombatPage: React.FC = () => {
     if (selectedSort?.zone) {
       zoneConfig = { type: selectedSort.zone.type, taille: selectedSort.zone.taille };
     } else if (weaponMode && armeData) {
-      // Weapon without zone data defaults to CASE
-      zoneConfig = { type: 'CASE', taille: 0 };
+      zoneConfig = armeZone ? { type: armeZone.type, taille: armeZone.taille } : { type: 'CASE', taille: 0 };
     }
 
     return getAffectedCells(
@@ -397,7 +370,7 @@ const CombatPage: React.FC = () => {
         porteeMin: armeData.porteeMin,
         porteeMax: armeData.porteeMax,
         statUtilisee: armeData.statUtilisee,
-        zone: null as { type: ZoneType; taille: number } | null,
+        zone: armeZone ? { type: armeZone.type, taille: armeZone.taille } : null,
         cooldown: armeData.cooldown,
         cooldownRestant: currentEntity?.armeCooldownRestant ?? 0,
         estSoin: false,
@@ -750,15 +723,30 @@ const CombatPage: React.FC = () => {
         {log.length === 0 ? (
           <div className="log-entry" style={{ color: 'var(--text-muted)' }}>Combat commence...</div>
         ) : (
-          log.map((entry, i) => {
+          log.map((entry) => {
             let entryClass = 'log-entry';
-            if (entry.includes('est mort')) entryClass += ' log-death';
-            else if (entry.includes('recupere')) entryClass += ' log-heal';
-            else if (entry.includes('subit')) entryClass += ' log-damage';
-            else if (entry.includes('expire')) entryClass += ' log-effect-expire';
-            else if (entry.includes('Tour ')) entryClass += ' log-turn';
-            else entryClass += ' log-effect';
-            return <div key={i} className={entryClass}>{entry}</div>;
+            switch (entry.type) {
+              case 'ACTION':
+                entryClass += entry.message.includes('récupère') ? ' log-heal' : ' log-damage';
+                break;
+              case 'MORT':
+                entryClass += ' log-death';
+                break;
+              case 'TOUR':
+              case 'DEPLACEMENT':
+                entryClass += ' log-turn';
+                break;
+              case 'EFFET':
+                entryClass += ' log-effect';
+                break;
+              case 'EFFET_EXPIRE':
+                entryClass += ' log-effect-expire';
+                break;
+              case 'FIN':
+                entryClass += ' log-death';
+                break;
+            }
+            return <div key={entry.id} className={entryClass}>{entry.message}</div>;
           })
         )}
       </div>

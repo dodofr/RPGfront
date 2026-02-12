@@ -202,11 +202,23 @@ Supporte : `text`, `number`, `select`, `checkbox`, `textarea`, et `showIf` pour 
 6. **Fin tour** → POST `/combats/:id/end-turn` → backend joue IA automatiquement
 7. **Fin combat** → écran victoire/défaite
 
+### Journal de combat
+- Les logs viennent du **backend** (`combat.logs[]`), pas de diff d'état côté client
+- `lastLogIdRef` (useRef) tracke le dernier log affiché pour éviter les doublons
+- À chaque poll, filtre `logs.filter(l => l.id > lastLogIdRef)` et append
+- CSS classes basées sur `CombatLogType` : ACTION→`log-damage`/`log-heal`, MORT→`log-death`, TOUR/DEPLACEMENT→`log-turn`, EFFET→`log-effect`, EFFET_EXPIRE→`log-effect-expire`, FIN→`log-death`
+- Logs persistent au refresh (rechargés depuis BDD)
+
 ### Grille CSS
 - CSS Grid : `grid-template-columns: repeat(largeur, 40px)`
 - Classes : `.player-cell`, `.enemy-cell`, `.invocation-cell`, `.obstacle`, `.current-turn`, `.dead`
 - Mini barre de vie sur chaque entité
 - Mode ciblage : `.target-mode` ajoute curseur crosshair
+
+### Preview déplacement (BFS)
+- `combatPreview.ts` : `getReachableCells()` utilise un **BFS flood fill** depuis la position du joueur
+- Contourne obstacles (`bloqueDeplacement`) et entités vivantes
+- Seules les cases réellement accessibles via un chemin valide sont surlignées (pas de "saut" par-dessus obstacles)
 
 ## Styles / Thème
 
@@ -241,6 +253,6 @@ server: {
 
 - **react-router-dom v7** : Toujours utiliser `createBrowserRouter`, jamais `BrowserRouter`
 - **Proxy Vite** : Les appels API passent par `/api` (pas d'URL absolue vers :3000)
-- **Types** : Miroir des modèles backend dans `types/index.ts`, à maintenir synchronisé
+- **Types** : Miroir des modèles backend dans `types/index.ts`, à maintenir synchronisé (inclut `CombatLogType`, `CombatLogEntry`, `CombatState.logs`)
 - **Polling combat** : 500ms, pas de WebSocket (MVP)
 - **Pas d'authentification** : MVP, tous les joueurs sont accessibles

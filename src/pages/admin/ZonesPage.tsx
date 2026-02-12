@@ -6,6 +6,19 @@ import { useCrud } from '../../hooks/useCrud';
 import { zonesApi } from '../../api/static';
 import type { Zone } from '../../types';
 
+const zoneDescriptions: Record<string, string> = {
+  CASE: 'Case unique ciblée',
+  CROIX: 'Croix (N/S/E/O) centrée sur la cible',
+  LIGNE: 'Ligne dans la direction lanceur → cible',
+  CONE: 'Cône qui s\'élargit en s\'éloignant du lanceur',
+  CERCLE: 'Cercle (distance Manhattan) centré sur la cible',
+  LIGNE_PERPENDICULAIRE: 'Ligne perpendiculaire à la direction lanceur → cible',
+  DIAGONALE: 'Croix diagonale (NE/NO/SE/SO) centrée sur la cible',
+  CARRE: 'Carré plein centré sur la cible',
+  ANNEAU: 'Anneau creux (bordure du cercle) autour de la cible',
+  CONE_INVERSE: 'Cône qui s\'élargit vers le lanceur',
+};
+
 const ZonesPage: React.FC = () => {
   const { items, loading, create, update, remove } = useCrud(zonesApi);
   const [showForm, setShowForm] = useState(false);
@@ -17,6 +30,11 @@ const ZonesPage: React.FC = () => {
     { key: 'nom', header: 'Nom' },
     { key: 'type', header: 'Type' },
     { key: 'taille', header: 'Taille' },
+    {
+      key: 'description',
+      header: 'Description',
+      render: (item) => zoneDescriptions[item.type] || item.type,
+    },
   ];
 
   const fields: FieldDef[] = [
@@ -27,14 +45,19 @@ const ZonesPage: React.FC = () => {
       type: 'select',
       required: true,
       options: [
-        { value: 'CASE', label: 'Case' },
-        { value: 'CROIX', label: 'Croix' },
-        { value: 'LIGNE', label: 'Ligne' },
-        { value: 'CONE', label: 'Cone' },
-        { value: 'CERCLE', label: 'Cercle' },
+        { value: 'CASE', label: 'Case — cible unique' },
+        { value: 'CROIX', label: 'Croix — N/S/E/O depuis la cible' },
+        { value: 'LIGNE', label: 'Ligne — direction lanceur → cible' },
+        { value: 'LIGNE_PERPENDICULAIRE', label: 'Ligne perp. — perpendiculaire au lanceur' },
+        { value: 'CONE', label: 'Cône — s\'élargit loin du lanceur' },
+        { value: 'CONE_INVERSE', label: 'Cône inv. — s\'élargit vers le lanceur' },
+        { value: 'CERCLE', label: 'Cercle — rayon Manhattan' },
+        { value: 'ANNEAU', label: 'Anneau — bordure du cercle uniquement' },
+        { value: 'DIAGONALE', label: 'Diagonale — croix NE/NO/SE/SO' },
+        { value: 'CARRE', label: 'Carré — zone pleine carrée' },
       ],
     },
-    { name: 'taille', label: 'Taille', type: 'number', required: true, min: 1, defaultValue: 1 },
+    { name: 'taille', label: 'Taille', type: 'number', required: true, min: 0, defaultValue: 1 },
   ];
 
   return (

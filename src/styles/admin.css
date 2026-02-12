@@ -67,6 +67,36 @@
   background: rgba(233, 69, 96, 0.2);
 }
 
+.grid-editor .grid-info {
+  margin-left: 6px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.grid-editor .grid-cell.obstacle-los {
+  background: #775;
+}
+
+.save-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.save-bar-title {
+  flex: 1;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.btn-sm {
+  padding: 3px 10px;
+  font-size: 12px;
+}
+
 /* Relation management */
 .relation-section {
   margin-top: 16px;
@@ -255,6 +285,16 @@
 .effect-badge.debuff {
   background: rgba(233, 69, 96, 0.3);
   color: var(--danger);
+}
+
+.effect-badge.dispel {
+  background: rgba(100, 181, 246, 0.3);
+  color: var(--info);
+}
+
+.badge-dispel {
+  background: rgba(100, 181, 246, 0.3);
+  color: var(--info);
 }
 
 /* Equipment grid */

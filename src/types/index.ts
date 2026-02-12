@@ -2,8 +2,8 @@
 export type StatType = 'FORCE' | 'INTELLIGENCE' | 'DEXTERITE' | 'AGILITE' | 'VIE' | 'CHANCE';
 export type SortType = 'ARME' | 'SORT';
 export type SlotType = 'ARME' | 'COIFFE' | 'AMULETTE' | 'BOUCLIER' | 'HAUT' | 'BAS' | 'ANNEAU1' | 'ANNEAU2' | 'FAMILIER';
-export type EffetType = 'BUFF' | 'DEBUFF';
-export type ZoneType = 'CASE' | 'CROIX' | 'LIGNE' | 'CONE' | 'CERCLE';
+export type EffetType = 'BUFF' | 'DEBUFF' | 'DISPEL';
+export type ZoneType = 'CASE' | 'CROIX' | 'LIGNE' | 'CONE' | 'CERCLE' | 'LIGNE_PERPENDICULAIRE' | 'DIAGONALE' | 'CARRE' | 'ANNEAU' | 'CONE_INVERSE';
 export type CombatStatus = 'EN_COURS' | 'TERMINE' | 'ABANDONNE';
 export type RegionType = 'FORET' | 'PLAINE' | 'DESERT' | 'MONTAGNE' | 'MARAIS' | 'CAVERNE' | 'CITE';
 export type MapType = 'WILDERNESS' | 'VILLE' | 'DONJON' | 'BOSS' | 'SAFE';
@@ -322,6 +322,15 @@ export interface EffetActif {
   valeur: number;
 }
 
+export type CombatLogType = 'ACTION' | 'DEPLACEMENT' | 'TOUR' | 'MORT' | 'EFFET' | 'EFFET_EXPIRE' | 'FIN';
+
+export interface CombatLogEntry {
+  id: number;
+  tour: number;
+  message: string;
+  type: CombatLogType;
+}
+
 export interface CombatState {
   id: number;
   status: CombatStatus;
@@ -332,6 +341,7 @@ export interface CombatState {
   cases: CombatCase[];
   effetsActifs: EffetActif[];
   cooldowns: { entiteId: number; sortId: number; toursRestants: number }[];
+  logs: CombatLogEntry[];
 }
 
 export interface Donjon {

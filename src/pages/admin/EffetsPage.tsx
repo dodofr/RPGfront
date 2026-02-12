@@ -5,6 +5,7 @@ import ConfirmDialog from '../../components/ConfirmDialog';
 import { useCrud } from '../../hooks/useCrud';
 import { effetsApi } from '../../api/static';
 import type { Effet } from '../../types';
+import '../../styles/admin.css';
 
 const EffetsPage: React.FC = () => {
   const { items, loading, create, update, remove } = useCrud(effetsApi);
@@ -15,7 +16,14 @@ const EffetsPage: React.FC = () => {
   const columns: Column<Effet>[] = [
     { key: 'id', header: 'ID' },
     { key: 'nom', header: 'Nom' },
-    { key: 'type', header: 'Type' },
+    {
+      key: 'type',
+      header: 'Type',
+      render: (item) => {
+        const cls = item.type === 'DISPEL' ? 'badge-dispel' : item.type === 'BUFF' ? 'badge-success' : 'badge-danger';
+        return <span className={`badge ${cls}`}>{item.type}</span>;
+      },
+    },
     { key: 'statCiblee', header: 'Stat ciblee' },
     { key: 'valeur', header: 'Valeur' },
     { key: 'duree', header: 'Duree' },
@@ -31,6 +39,7 @@ const EffetsPage: React.FC = () => {
       options: [
         { value: 'BUFF', label: 'Buff' },
         { value: 'DEBUFF', label: 'Debuff' },
+        { value: 'DISPEL', label: 'Dispel' },
       ],
     },
     {

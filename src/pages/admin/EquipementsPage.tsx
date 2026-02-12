@@ -1,13 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import DataTable, { type Column } from '../../components/DataTable';
 import FormModal, { type FieldDef } from '../../components/FormModal';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { useCrud } from '../../hooks/useCrud';
-import { equipmentApi } from '../../api/static';
-import type { Equipment } from '../../types';
+import { equipmentApi, zonesApi } from '../../api/static';
+import type { Equipment, Zone } from '../../types';
 
 const EquipementsPage: React.FC = () => {
   const { items, loading, create, update, remove } = useCrud(equipmentApi);
+  const [zones, setZones] = useState<Zone[]>([]);
+
+  useEffect(() => {
+    zonesApi.getAll().then(setZones);
+  }, []);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Equipment | null>(null);
   const [deleting, setDeleting] = useState<Equipment | null>(null);
@@ -117,8 +122,9 @@ const EquipementsPage: React.FC = () => {
     },
     {
       name: 'zoneId',
-      label: 'Zone ID',
-      type: 'number',
+      label: 'Zone',
+      type: 'select',
+      options: zones.map(z => ({ value: z.id, label: `${z.nom} (${z.type})` })),
       showIf: (v) => v.slot === 'ARME',
     },
     {

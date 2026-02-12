@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import DataTable, { type Column } from '../../components/DataTable';
 import FormModal, { type FieldDef } from '../../components/FormModal';
 import ConfirmDialog from '../../components/ConfirmDialog';
@@ -8,6 +9,7 @@ import { mapsApi } from '../../api/maps';
 import type { GrilleCombat, GameMap } from '../../types';
 
 const GrillesPage: React.FC = () => {
+  const navigate = useNavigate();
   const { items, loading, create, update, remove } = useCrud(grillesApi);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<GrilleCombat | null>(null);
@@ -42,6 +44,15 @@ const GrillesPage: React.FC = () => {
       key: 'spawns',
       header: 'Spawns',
       render: (item) => String(item._count?.spawns ?? item.spawns?.length ?? 0),
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      render: (item) => (
+        <button className="btn btn-sm" onClick={(e) => { e.stopPropagation(); navigate(`/admin/grilles/${item.id}/edit`); }}>
+          Editer grille
+        </button>
+      ),
     },
   ];
 

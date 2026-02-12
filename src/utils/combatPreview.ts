@@ -31,15 +31,44 @@ export function getReachableCells(
   entities.filter(e => e.pvActuels > 0).forEach(e => occupiedSet.add(key(e.position.x, e.position.y)));
   obstacles.filter(c => c.bloqueDeplacement).forEach(c => blockedSet.add(key(c.x, c.y)));
 
-  for (let x = 0; x < gridWidth; x++) {
-    for (let y = 0; y < gridHeight; y++) {
-      if (x === from.x && y === from.y) continue;
-      const dist = manhattanDistance(from.x, from.y, x, y);
-      if (dist > pm) continue;
-      const k = key(x, y);
-      if (blockedSet.has(k)) continue;
-      if (occupiedSet.has(k)) continue;
-      result.add(k);
+  // BFS flood fill from starting position
+  const visited = new Set<string>();
+  const startKey = key(from.x, from.y);
+  visited.add(startKey);
+
+  const queue: Array<{ x: number; y: number; cost: number }> = [
+    { x: from.x, y: from.y, cost: 0 },
+  ];
+
+  const directions = [
+    { dx: 1, dy: 0 },
+    { dx: -1, dy: 0 },
+    { dx: 0, dy: 1 },
+    { dx: 0, dy: -1 },
+  ];
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+
+    for (const dir of directions) {
+      const nx = current.x + dir.dx;
+      const ny = current.y + dir.dy;
+      const nk = key(nx, ny);
+      const nextCost = current.cost + 1;
+
+      if (nextCost > pm) continue;
+      if (!isInBounds(nx, ny, gridWidth, gridHeight)) continue;
+      if (visited.has(nk)) continue;
+      if (blockedSet.has(nk)) continue;
+
+      visited.add(nk);
+
+      // Can't stop on occupied cells, but can potentially walk through?
+      // No — entities block movement, so we can't walk through them
+      if (occupiedSet.has(nk)) continue;
+
+      result.add(nk);
+      queue.push({ x: nx, y: ny, cost: nextCost });
     }
   }
 
@@ -231,6 +260,89 @@ export function getAffectedCells(
           if (isInBounds(x, y, gridWidth, gridHeight)) {
             affected.add(key(x, y));
           }
+        }
+      }
+      break;
+    }
+
+    case 'LIGNE_PERPENDICULAIRE': {
+      if (!casterPos) {
+        affected.add(key(target.x, target.y));
+        break;
+      }
+      const lpdx = target.x - casterPos.x;
+      const lpdy = target.y - casterPos.y;
+      let perpX: number, perpY: number;
+      if (Math.abs(lpdx) > Math.abs(lpdy)) {
+        perpX = 0; perpY = 1;
+      } else {
+        perpX = 1; perpY = 0;
+      }
+      affected.add(key(target.x, target.y));
+      for (let i = 1; i <= zone.taille; i++) {
+        if (isInBounds(target.x + perpX * i, target.y + perpY * i, gridWidth, gridHeight))
+          affected.add(key(target.x + perpX * i, target.y + perpY * i));
+        if (isInBounds(target.x - perpX * i, target.y - perpY * i, gridWidth, gridHeight))
+          affected.add(key(target.x - perpX * i, target.y - perpY * i));
+      }
+      break;
+    }
+
+    case 'DIAGONALE':
+      affected.add(key(target.x, target.y));
+      for (let i = 1; i <= zone.taille; i++) {
+        const diags: [number, number][] = [
+          [target.x + i, target.y - i],
+          [target.x - i, target.y - i],
+          [target.x + i, target.y + i],
+          [target.x - i, target.y + i],
+        ];
+        for (const [dx, dy] of diags) {
+          if (isInBounds(dx, dy, gridWidth, gridHeight))
+            affected.add(key(dx, dy));
+        }
+      }
+      break;
+
+    case 'CARRE':
+      for (let x = target.x - zone.taille; x <= target.x + zone.taille; x++) {
+        for (let y = target.y - zone.taille; y <= target.y + zone.taille; y++) {
+          if (isInBounds(x, y, gridWidth, gridHeight))
+            affected.add(key(x, y));
+        }
+      }
+      break;
+
+    case 'ANNEAU':
+      for (let x = 0; x < gridWidth; x++) {
+        for (let y = 0; y < gridHeight; y++) {
+          if (manhattanDistance(target.x, target.y, x, y) === zone.taille)
+            affected.add(key(x, y));
+        }
+      }
+      break;
+
+    case 'CONE_INVERSE': {
+      if (!casterPos) {
+        affected.add(key(target.x, target.y));
+        break;
+      }
+      const cidx = target.x - casterPos.x;
+      const cidy = target.y - casterPos.y;
+      let invPX = cidx === 0 ? 0 : cidx > 0 ? -1 : 1;
+      let invPY = cidy === 0 ? 0 : cidy > 0 ? -1 : 1;
+      if (Math.abs(cidx) > Math.abs(cidy)) invPY = 0;
+      else if (Math.abs(cidy) > Math.abs(cidx)) invPX = 0;
+
+      for (let i = 0; i <= zone.taille; i++) {
+        const baseX = target.x + invPX * i;
+        const baseY = target.y + invPY * i;
+        const width = i;
+        for (let w = -width; w <= width; w++) {
+          const x = invPX !== 0 ? baseX : baseX + w;
+          const y = invPX !== 0 ? baseY + w : baseY;
+          if (isInBounds(x, y, gridWidth, gridHeight))
+            affected.add(key(x, y));
         }
       }
       break;
