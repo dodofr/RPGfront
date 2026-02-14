@@ -4,11 +4,25 @@ import FormModal, { type FieldDef } from '../../components/FormModal';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { useCrud } from '../../hooks/useCrud';
 import { equipmentApi, zonesApi } from '../../api/static';
-import type { Equipment, Zone } from '../../types';
+import type { Equipment, Zone, LigneDegatsArme, StatType } from '../../types';
+import '../../styles/admin.css';
+
+const STAT_OPTIONS: { value: StatType; label: string }[] = [
+  { value: 'FORCE', label: 'Force' },
+  { value: 'INTELLIGENCE', label: 'Intelligence' },
+  { value: 'DEXTERITE', label: 'Dexterite' },
+  { value: 'AGILITE', label: 'Agilite' },
+  { value: 'VIE', label: 'Vie' },
+  { value: 'CHANCE', label: 'Chance' },
+];
 
 const EquipementsPage: React.FC = () => {
-  const { items, loading, create, update, remove } = useCrud(equipmentApi);
+  const { items, loading, create, update, remove, refresh } = useCrud(equipmentApi);
   const [zones, setZones] = useState<Zone[]>([]);
+  const [selected, setSelected] = useState<Equipment | null>(null);
+
+  // Ligne add form
+  const [newLigne, setNewLigne] = useState({ degatsMin: 0, degatsMax: 0, statUtilisee: 'FORCE' as StatType, estVolDeVie: false, estSoin: false });
 
   useEffect(() => {
     zonesApi.getAll().then(setZones);
@@ -16,6 +30,11 @@ const EquipementsPage: React.FC = () => {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Equipment | null>(null);
   const [deleting, setDeleting] = useState<Equipment | null>(null);
+
+  const selectEquip = async (id: number) => {
+    const eq = await equipmentApi.getById(id);
+    setSelected(eq);
+  };
 
   const columns: Column<Equipment>[] = [
     { key: 'id', header: 'ID' },
@@ -58,28 +77,28 @@ const EquipementsPage: React.FC = () => {
     // Weapon-specific fields (shown only when slot is ARME)
     {
       name: 'degatsMin',
-      label: 'Degats min',
+      label: 'Degats min (base)',
       type: 'number',
       defaultValue: 0,
       showIf: (v) => v.slot === 'ARME',
     },
     {
       name: 'degatsMax',
-      label: 'Degats max',
+      label: 'Degats max (base)',
       type: 'number',
       defaultValue: 0,
       showIf: (v) => v.slot === 'ARME',
     },
     {
       name: 'degatsCritMin',
-      label: 'Degats crit min',
+      label: 'Degats crit min (base)',
       type: 'number',
       defaultValue: 0,
       showIf: (v) => v.slot === 'ARME',
     },
     {
       name: 'degatsCritMax',
-      label: 'Degats crit max',
+      label: 'Degats crit max (base)',
       type: 'number',
       defaultValue: 0,
       showIf: (v) => v.slot === 'ARME',
@@ -90,6 +109,13 @@ const EquipementsPage: React.FC = () => {
       type: 'float',
       defaultValue: 0.05,
       step: 0.01,
+      showIf: (v) => v.slot === 'ARME',
+    },
+    {
+      name: 'bonusCrit',
+      label: 'Bonus crit (+X sur min/max)',
+      type: 'number',
+      defaultValue: 0,
       showIf: (v) => v.slot === 'ARME',
     },
     {
@@ -129,16 +155,9 @@ const EquipementsPage: React.FC = () => {
     },
     {
       name: 'statUtilisee',
-      label: 'Stat utilisee',
+      label: 'Stat utilisee (base)',
       type: 'select',
-      options: [
-        { value: 'FORCE', label: 'Force' },
-        { value: 'INTELLIGENCE', label: 'Intelligence' },
-        { value: 'DEXTERITE', label: 'Dexterite' },
-        { value: 'AGILITE', label: 'Agilite' },
-        { value: 'VIE', label: 'Vie' },
-        { value: 'CHANCE', label: 'Chance' },
-      ],
+      options: STAT_OPTIONS,
       showIf: (v) => v.slot === 'ARME',
     },
     {
@@ -156,7 +175,30 @@ const EquipementsPage: React.FC = () => {
       step: 0.01,
       showIf: (v) => v.slot === 'ARME',
     },
+    {
+      name: 'estVolDeVie',
+      label: 'Vol de vie (global)',
+      type: 'checkbox',
+      defaultValue: false,
+      showIf: (v) => v.slot === 'ARME',
+    },
   ];
+
+  const handleAddLigne = async () => {
+    if (!selected) return;
+    const nextOrdre = (selected.lignesDegats?.length ?? 0) + 1;
+    await equipmentApi.addLigne(selected.id, { ...newLigne, ordre: nextOrdre });
+    await selectEquip(selected.id);
+    await refresh();
+    setNewLigne({ degatsMin: 0, degatsMax: 0, statUtilisee: 'FORCE', estVolDeVie: false, estSoin: false });
+  };
+
+  const handleRemoveLigne = async (ligneId: number) => {
+    if (!selected) return;
+    await equipmentApi.removeLigne(selected.id, ligneId);
+    await selectEquip(selected.id);
+    await refresh();
+  };
 
   return (
     <div className="admin-page">
@@ -172,7 +214,104 @@ const EquipementsPage: React.FC = () => {
         loading={loading}
         onEdit={item => { setEditing(item); setShowForm(true); }}
         onDelete={item => setDeleting(item)}
+        onRowClick={item => selectEquip(item.id)}
+        selectedId={selected?.id}
       />
+
+      {/* Detail panel for weapons */}
+      {selected && selected.slot === 'ARME' && (
+        <div className="detail-panel">
+          <h3>{selected.nom} <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>Niv. {selected.niveauMinimum}</span></h3>
+          <div className="detail-sections">
+            <div className="detail-section">
+              <h4>Attaque de base</h4>
+              <div className="stat-grid">
+                <div className="stat-row">
+                  <span className="stat-label">Degats</span>
+                  <span className="stat-value">{selected.degatsMin}-{selected.degatsMax}</span>
+                </div>
+                <div className="stat-row">
+                  <span className="stat-label">Crit</span>
+                  <span className="stat-value">{selected.degatsCritMin}-{selected.degatsCritMax}</span>
+                </div>
+                <div className="stat-row">
+                  <span className="stat-label">% Crit</span>
+                  <span className="stat-value">{Math.round((selected.chanceCritBase ?? 0) * 100)}%</span>
+                </div>
+                <div className="stat-row">
+                  <span className="stat-label">Bonus crit</span>
+                  <span className="stat-value">+{selected.bonusCrit ?? 0}</span>
+                </div>
+                <div className="stat-row">
+                  <span className="stat-label">Stat</span>
+                  <span className="stat-value">{selected.statUtilisee}</span>
+                </div>
+                <div className="stat-row">
+                  <span className="stat-label">PA</span>
+                  <span className="stat-value">{selected.coutPA}</span>
+                </div>
+                <div className="stat-row">
+                  <span className="stat-label">Portee</span>
+                  <span className="stat-value">{selected.porteeMin}-{selected.porteeMax}</span>
+                </div>
+                {selected.tauxEchec != null && selected.tauxEchec > 0 && (
+                  <div className="stat-row">
+                    <span className="stat-label">Echec</span>
+                    <span className="stat-value" style={{ color: 'var(--danger)' }}>{Math.round(selected.tauxEchec * 100)}%</span>
+                  </div>
+                )}
+                {selected.estVolDeVie && (
+                  <div className="stat-row">
+                    <span className="stat-label">Vol de vie</span>
+                    <span className="stat-value" style={{ color: '#00c853' }}>Oui</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="detail-section">
+              <h4>Lignes de degats ({selected.lignesDegats?.length ?? 0})</h4>
+              {selected.lignesDegats && selected.lignesDegats.length > 0 ? (
+                <div className="sort-list">
+                  {selected.lignesDegats.map(l => (
+                    <div key={l.id} className="sort-item">
+                      <div>
+                        <span className="sort-name">Ligne {l.ordre}</span>
+                        <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--text-muted)' }}>
+                          {l.degatsMin}-{l.degatsMax} {l.statUtilisee}
+                          {l.estVolDeVie && <span style={{ color: '#00c853', marginLeft: 4 }}>Vol de vie</span>}
+                          {l.estSoin && <span style={{ color: 'var(--success)', marginLeft: 4 }}>Soin</span>}
+                        </span>
+                      </div>
+                      <button className="btn btn-sm btn-danger" onClick={() => handleRemoveLigne(l.id)}>X</button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 8 }}>
+                  Aucune ligne — utilise l'attaque de base
+                </div>
+              )}
+
+              <div className="inline-add" style={{ flexWrap: 'wrap' }}>
+                <input type="number" placeholder="Min" value={newLigne.degatsMin} onChange={e => setNewLigne(p => ({ ...p, degatsMin: +e.target.value }))} style={{ width: 50 }} />
+                <input type="number" placeholder="Max" value={newLigne.degatsMax} onChange={e => setNewLigne(p => ({ ...p, degatsMax: +e.target.value }))} style={{ width: 50 }} />
+                <select value={newLigne.statUtilisee} onChange={e => setNewLigne(p => ({ ...p, statUtilisee: e.target.value as StatType }))}>
+                  {STAT_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                </select>
+                <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 2 }}>
+                  <input type="checkbox" checked={newLigne.estVolDeVie} onChange={e => setNewLigne(p => ({ ...p, estVolDeVie: e.target.checked }))} /> VdV
+                </label>
+                <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 2 }}>
+                  <input type="checkbox" checked={newLigne.estSoin} onChange={e => setNewLigne(p => ({ ...p, estSoin: e.target.checked }))} /> Soin
+                </label>
+                <button className="btn btn-sm btn-primary" onClick={handleAddLigne}>+ Ajouter</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <FormModal
         open={showForm}
         title={editing ? 'Modifier un equipement' : 'Creer un equipement'}

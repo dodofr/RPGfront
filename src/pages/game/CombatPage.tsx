@@ -10,6 +10,15 @@ import {
   hasLineOfSight,
 } from '../../utils/combatPreview';
 
+interface LigneDegatsData {
+  ordre: number;
+  degatsMin: number;
+  degatsMax: number;
+  statUtilisee: string;
+  estVolDeVie: boolean;
+  estSoin: boolean;
+}
+
 interface ArmeData {
   nom: string;
   degatsMin: number;
@@ -17,6 +26,7 @@ interface ArmeData {
   degatsCritMin: number;
   degatsCritMax: number;
   chanceCritBase: number;
+  bonusCrit: number;
   coutPA: number;
   porteeMin: number;
   porteeMax: number;
@@ -25,6 +35,8 @@ interface ArmeData {
   statUtilisee: string;
   cooldown: number;
   tauxEchec: number;
+  estVolDeVie?: boolean;
+  lignes?: LigneDegatsData[];
 }
 
 const STAT_LABELS: Record<string, string> = {
@@ -34,6 +46,9 @@ const STAT_LABELS: Record<string, string> = {
   AGILITE: 'Agilité',
   VIE: 'Vie',
   CHANCE: 'Chance',
+  PA: 'PA',
+  PM: 'PM',
+  PO: 'PO',
 };
 
 const ZONE_LABELS: Record<string, string> = {
@@ -353,6 +368,7 @@ const CombatPage: React.FC = () => {
         estSoin: selectedSort.estSoin,
         estDispel: selectedSort.estDispel,
         estInvocation: selectedSort.estInvocation,
+        estVolDeVie: selectedSort.estVolDeVie ?? false,
         effets: selectedSort.effets || [],
       };
     }
@@ -366,6 +382,7 @@ const CombatPage: React.FC = () => {
         degatsCritMin: armeData.degatsCritMin,
         degatsCritMax: armeData.degatsCritMax,
         chanceCritBase: armeData.chanceCritBase,
+        bonusCrit: armeData.bonusCrit ?? 0,
         tauxEchec: armeData.tauxEchec,
         porteeMin: armeData.porteeMin,
         porteeMax: armeData.porteeMax,
@@ -376,7 +393,9 @@ const CombatPage: React.FC = () => {
         estSoin: false,
         estDispel: false,
         estInvocation: false,
+        estVolDeVie: armeData.estVolDeVie ?? false,
         effets: [] as NonNullable<Sort['effets']>,
+        lignes: armeData.lignes ?? [],
       };
     }
     return null;
@@ -411,6 +430,7 @@ const CombatPage: React.FC = () => {
           const effects = getEntityEffects(e.id);
           const hasBuff = effects.some(ef => ef.type === 'BUFF');
           const hasDebuff = effects.some(ef => ef.type === 'DEBUFF');
+          const hasPoison = effects.some(ef => ef.type === 'POISON');
           return (
             <span key={e.id} className={`turn-entity ${e.equipe === 0 ? 'player' : 'enemy'} ${e.pvActuels <= 0 ? 'dead' : ''} ${e.id === combat.entiteActuelle ? 'active' : ''}`}>
               <span className="turn-name">{e.nom}</span>
@@ -421,10 +441,11 @@ const CombatPage: React.FC = () => {
                   <span className="turn-pm">{e.pmActuels}PM</span>
                 </span>
               )}
-              {(hasBuff || hasDebuff) && (
+              {(hasBuff || hasDebuff || hasPoison) && (
                 <span className="turn-effects">
                   {hasBuff && <span className="turn-dot buff-dot" />}
                   {hasDebuff && <span className="turn-dot debuff-dot" />}
+                  {hasPoison && <span className="turn-dot poison-dot" />}
                 </span>
               )}
             </span>
@@ -461,13 +482,19 @@ const CombatPage: React.FC = () => {
                   <div className="stat-row"><span className="label">CHA</span><span>{ent.stats.chance}</span></div>
                   {effects.length > 0 && (
                     <div className="effects-list">
-                      {effects.map(ef => (
-                        <span key={ef.id} className={`effect-tag ${ef.type?.toLowerCase() || ''}`}
-                          title={`${STAT_LABELS[ef.statCiblee] || ef.statCiblee} ${ef.valeur > 0 ? '+' : ''}${ef.valeur}`}>
-                          {ef.nom || `Effet #${ef.effetId}`} ({ef.toursRestants}t)
-                          <span className="effect-detail"> {STAT_LABELS[ef.statCiblee] || ef.statCiblee} {ef.valeur > 0 ? '+' : ''}{ef.valeur}</span>
-                        </span>
-                      ))}
+                      {effects.map(ef => {
+                        const isPoisonEf = ef.type === 'POISON';
+                        const detail = isPoisonEf
+                          ? `${ef.valeurMin ?? ef.valeur}-${ef.valeur} dgts/tour`
+                          : `${STAT_LABELS[ef.statCiblee] || ef.statCiblee} ${ef.valeur > 0 ? '+' : ''}${ef.valeur}`;
+                        return (
+                          <span key={ef.id} className={`effect-tag ${ef.type?.toLowerCase() || ''}`}
+                            title={detail}>
+                            {ef.nom || `Effet #${ef.effetId}`} ({ef.toursRestants}t)
+                            <span className="effect-detail"> {detail}</span>
+                          </span>
+                        );
+                      })}
                     </div>
                   )}
                 </>
@@ -542,17 +569,38 @@ const CombatPage: React.FC = () => {
                     <div className="spell-description">{spellInfoData.description}</div>
                   )}
                   <div className="spell-info-rows">
-                    {!spellInfoData.estDispel && !spellInfoData.estInvocation && (
-                      <div className="spell-info-row">
-                        <span className="label">{spellInfoData.estSoin ? 'Soin' : 'Degats'}</span>
-                        <span>{spellInfoData.degatsMin}-{spellInfoData.degatsMax} {STAT_LABELS[spellInfoData.statUtilisee] || spellInfoData.statUtilisee}</span>
-                      </div>
-                    )}
-                    {!spellInfoData.estDispel && !spellInfoData.estInvocation && spellInfoData.degatsCritMin > 0 && (
-                      <div className="spell-info-row">
-                        <span className="label">Critique</span>
-                        <span>{spellInfoData.degatsCritMin}-{spellInfoData.degatsCritMax} ({Math.round(spellInfoData.chanceCritBase * 100)}%)</span>
-                      </div>
+                    {/* Multi-line weapon damage */}
+                    {'lignes' in spellInfoData && (spellInfoData as any).lignes?.length > 0 ? (
+                      <>
+                        {(spellInfoData as any).lignes.map((l: LigneDegatsData, i: number) => (
+                          <div key={i} className="spell-info-row">
+                            <span className="label">
+                              {l.estSoin ? 'Soin' : 'Degats'} {i + 1}
+                              {l.estVolDeVie && <span style={{ color: '#00c853', fontSize: 10, marginLeft: 3 }}>VdV</span>}
+                            </span>
+                            <span>{l.degatsMin}-{l.degatsMax} {STAT_LABELS[l.statUtilisee] || l.statUtilisee}</span>
+                          </div>
+                        ))}
+                        <div className="spell-info-row">
+                          <span className="label">Critique</span>
+                          <span>+{(spellInfoData as any).bonusCrit ?? 0} ({Math.round(spellInfoData.chanceCritBase * 100)}%)</span>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        {!spellInfoData.estDispel && !spellInfoData.estInvocation && (
+                          <div className="spell-info-row">
+                            <span className="label">{spellInfoData.estSoin ? 'Soin' : 'Degats'}</span>
+                            <span>{spellInfoData.degatsMin}-{spellInfoData.degatsMax} {STAT_LABELS[spellInfoData.statUtilisee] || spellInfoData.statUtilisee}</span>
+                          </div>
+                        )}
+                        {!spellInfoData.estDispel && !spellInfoData.estInvocation && spellInfoData.degatsCritMin > 0 && (
+                          <div className="spell-info-row">
+                            <span className="label">Critique</span>
+                            <span>{spellInfoData.degatsCritMin}-{spellInfoData.degatsCritMax} ({Math.round(spellInfoData.chanceCritBase * 100)}%)</span>
+                          </div>
+                        )}
+                      </>
                     )}
                     {spellInfoData.tauxEchec > 0 && (
                       <div className="spell-info-row">
@@ -577,11 +625,12 @@ const CombatPage: React.FC = () => {
                       </div>
                     )}
                   </div>
-                  {(spellInfoData.estSoin || spellInfoData.estDispel || spellInfoData.estInvocation) && (
+                  {(spellInfoData.estSoin || spellInfoData.estDispel || spellInfoData.estInvocation || spellInfoData.estVolDeVie) && (
                     <div className="spell-info-badges">
                       {spellInfoData.estSoin && <span className="spell-badge heal">Soin</span>}
                       {spellInfoData.estDispel && <span className="spell-badge dispel">Dispel</span>}
                       {spellInfoData.estInvocation && <span className="spell-badge invocation">Invocation</span>}
+                      {spellInfoData.estVolDeVie && <span className="spell-badge lifesteal">Vol de vie</span>}
                     </div>
                   )}
                   {/* Effects section */}
@@ -592,7 +641,9 @@ const CombatPage: React.FC = () => {
                         <div key={i} className={`spell-effect-row ${ef.type.toLowerCase()}`}>
                           <span className="spell-effect-name">{ef.nom}</span>
                           <span className="spell-effect-detail">
-                            {STAT_LABELS[ef.statCiblee] || ef.statCiblee} {ef.valeur > 0 ? '+' : ''}{ef.valeur}
+                            {ef.type === 'POISON'
+                              ? `${ef.valeurMin ?? ef.valeur}-${ef.valeur} dgts/tour`
+                              : `${STAT_LABELS[ef.statCiblee] || ef.statCiblee} ${ef.valeur > 0 ? '+' : ''}${ef.valeur}`}
                           </span>
                           <span className="spell-effect-meta">
                             {ef.duree}t | {Math.round(ef.chanceDeclenchement * 100)}% | {ef.surCible ? 'cible' : 'lanceur'}
@@ -697,14 +748,18 @@ const CombatPage: React.FC = () => {
                         </div>
                         {hoveredEffects.length > 0 && (
                           <div className="tooltip-effects">
-                            {hoveredEffects.map(ef => (
-                              <span key={ef.id} className={`tooltip-effect ${ef.type?.toLowerCase() || ''}`}>
-                                {ef.nom || `Effet #${ef.effetId}`} ({ef.toursRestants}t)
-                                <span className="tooltip-effect-detail">
-                                  {' '}{STAT_LABELS[ef.statCiblee] || ef.statCiblee} {ef.valeur > 0 ? '+' : ''}{ef.valeur}
+                            {hoveredEffects.map(ef => {
+                              const isPoisonEf = ef.type === 'POISON';
+                              const detail = isPoisonEf
+                                ? `${ef.valeurMin ?? ef.valeur}-${ef.valeur} dgts/tour`
+                                : `${STAT_LABELS[ef.statCiblee] || ef.statCiblee} ${ef.valeur > 0 ? '+' : ''}${ef.valeur}`;
+                              return (
+                                <span key={ef.id} className={`tooltip-effect ${ef.type?.toLowerCase() || ''}`}>
+                                  {ef.nom || `Effet #${ef.effetId}`} ({ef.toursRestants}t)
+                                  <span className="tooltip-effect-detail"> {detail}</span>
                                 </span>
-                              </span>
-                            ))}
+                              );
+                            })}
                           </div>
                         )}
                       </div>

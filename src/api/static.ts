@@ -1,5 +1,5 @@
 import api from './client';
-import type { Race, Sort, Equipment, Effet, Zone, SortEffet } from '../types';
+import type { Race, Sort, Equipment, Effet, Zone, SortEffet, LigneDegatsArme } from '../types';
 
 export const racesApi = {
   getAll: () => api.get<Race[]>('/races').then(r => r.data),
@@ -27,6 +27,12 @@ export const equipmentApi = {
   create: (data: Partial<Equipment>) => api.post<Equipment>('/equipment', data).then(r => r.data),
   update: (id: number, data: Partial<Equipment>) => api.patch<Equipment>(`/equipment/${id}`, data).then(r => r.data),
   remove: (id: number) => api.delete(`/equipment/${id}`),
+  addLigne: (equipementId: number, data: Partial<LigneDegatsArme>) =>
+    api.post<LigneDegatsArme>(`/equipment/${equipementId}/lignes`, data).then(r => r.data),
+  updateLigne: (equipementId: number, ligneId: number, data: Partial<LigneDegatsArme>) =>
+    api.patch<LigneDegatsArme>(`/equipment/${equipementId}/lignes/${ligneId}`, data).then(r => r.data),
+  removeLigne: (equipementId: number, ligneId: number) =>
+    api.delete(`/equipment/${equipementId}/lignes/${ligneId}`),
 };
 
 export const effetsApi = {

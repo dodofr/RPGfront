@@ -85,6 +85,8 @@
 
 .effect-tag.buff { background: rgba(76, 175, 80, 0.3); color: var(--success); }
 .effect-tag.debuff { background: rgba(233, 69, 96, 0.3); color: var(--danger); }
+.effect-tag.poussee, .effect-tag.attirance { background: rgba(255, 152, 0, 0.3); color: var(--warning); }
+.effect-tag.poison { background: rgba(0, 200, 83, 0.3); color: #00c853; }
 
 /* Spell Bar */
 .spell-bar {
@@ -427,6 +429,17 @@
   color: var(--danger);
 }
 
+.entity-tooltip .tooltip-effect.poison {
+  background: rgba(0, 200, 83, 0.3);
+  color: #00c853;
+}
+
+.entity-tooltip .tooltip-effect.poussee,
+.entity-tooltip .tooltip-effect.attirance {
+  background: rgba(255, 152, 0, 0.3);
+  color: var(--warning);
+}
+
 /* ======= Spell Info Panel ======= */
 
 .spell-info-panel {
@@ -501,6 +514,11 @@
   color: #ce93d8;
 }
 
+.spell-badge.lifesteal {
+  background: rgba(0, 200, 83, 0.25);
+  color: #00c853;
+}
+
 /* ======= Spell Description ======= */
 
 .spell-description {
@@ -554,6 +572,10 @@
 
 .spell-effect-row.buff .spell-effect-name { color: var(--success); }
 .spell-effect-row.debuff .spell-effect-name { color: var(--danger); }
+.spell-effect-row.poussee, .spell-effect-row.attirance { background: rgba(255, 152, 0, 0.15); }
+.spell-effect-row.poussee .spell-effect-name, .spell-effect-row.attirance .spell-effect-name { color: var(--warning); }
+.spell-effect-row.poison { background: rgba(0, 200, 83, 0.15); }
+.spell-effect-row.poison .spell-effect-name { color: #00c853; }
 
 .spell-effect-detail {
   color: var(--text);
@@ -622,6 +644,10 @@
 
 .debuff-dot {
   background: var(--danger);
+}
+
+.poison-dot {
+  background: #00c853;
 }
 
 /* ======= Grid Cell Effects & Resources ======= */

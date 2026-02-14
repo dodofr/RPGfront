@@ -69,7 +69,20 @@ const GridEditorPage: React.FC = () => {
       const key = `${x},${y}`;
 
       if (tool === 'eraser') {
+        const deleted = next.get(key);
         next.delete(key);
+        // Re-number spawns after deletion to avoid gaps (1,2,4,5 → 1,2,3,4)
+        if (deleted && (deleted.type === 'spawn-player' || deleted.type === 'spawn-enemy')) {
+          const spawnType = deleted.type;
+          const spawns: { key: string; data: CellData & { type: typeof spawnType; ordre: number } }[] = [];
+          for (const [k, v] of next.entries()) {
+            if (v.type === spawnType) spawns.push({ key: k, data: v as any });
+          }
+          spawns.sort((a, b) => a.data.ordre - b.data.ordre);
+          spawns.forEach((s, i) => {
+            next.set(s.key, { type: spawnType, ordre: i + 1 });
+          });
+        }
         return next;
       }
 

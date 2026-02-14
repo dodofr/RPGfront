@@ -1,8 +1,8 @@
 // Enums
-export type StatType = 'FORCE' | 'INTELLIGENCE' | 'DEXTERITE' | 'AGILITE' | 'VIE' | 'CHANCE';
+export type StatType = 'FORCE' | 'INTELLIGENCE' | 'DEXTERITE' | 'AGILITE' | 'VIE' | 'CHANCE' | 'PA' | 'PM' | 'PO';
 export type SortType = 'ARME' | 'SORT';
 export type SlotType = 'ARME' | 'COIFFE' | 'AMULETTE' | 'BOUCLIER' | 'HAUT' | 'BAS' | 'ANNEAU1' | 'ANNEAU2' | 'FAMILIER';
-export type EffetType = 'BUFF' | 'DEBUFF' | 'DISPEL';
+export type EffetType = 'BUFF' | 'DEBUFF' | 'DISPEL' | 'POUSSEE' | 'ATTIRANCE' | 'POISON';
 export type ZoneType = 'CASE' | 'CROIX' | 'LIGNE' | 'CONE' | 'CERCLE' | 'LIGNE_PERPENDICULAIRE' | 'DIAGONALE' | 'CARRE' | 'ANNEAU' | 'CONE_INVERSE';
 export type CombatStatus = 'EN_COURS' | 'TERMINE' | 'ABANDONNE';
 export type RegionType = 'FORET' | 'PLAINE' | 'DESERT' | 'MONTAGNE' | 'MARAIS' | 'CAVERNE' | 'CITE';
@@ -63,6 +63,7 @@ export interface Sort {
   raceId: number | null;
   race?: Race | null;
   estInvocation: boolean;
+  estVolDeVie: boolean;
   invocationTemplateId: number | null;
   effets?: {
     effetId: number;
@@ -70,6 +71,7 @@ export interface Sort {
     type: string;
     statCiblee: string;
     valeur: number;
+    valeurMin?: number | null;
     duree: number;
     chanceDeclenchement: number;
     surCible: boolean;
@@ -80,6 +82,7 @@ export interface Sort {
       type: string;
       statCiblee: string;
       valeur: number;
+      valeurMin?: number | null;
       duree: number;
     };
   }[];
@@ -112,6 +115,20 @@ export interface Equipment {
   statUtilisee: StatType | null;
   cooldown: number | null;
   tauxEchec: number | null;
+  estVolDeVie?: boolean;
+  bonusCrit: number | null;
+  lignesDegats?: LigneDegatsArme[];
+}
+
+export interface LigneDegatsArme {
+  id: number;
+  equipementId: number;
+  ordre: number;
+  degatsMin: number;
+  degatsMax: number;
+  statUtilisee: StatType;
+  estVolDeVie: boolean;
+  estSoin: boolean;
 }
 
 export interface Effet {
@@ -120,6 +137,7 @@ export interface Effet {
   type: EffetType;
   statCiblee: StatType;
   valeur: number;
+  valeurMin?: number | null;
   duree: number;
 }
 
@@ -301,6 +319,7 @@ export interface CombatEntity {
   niveau: number | null;
   monstreTemplateId: number | null;
   iaType: string | null;
+  poBonus: number;
   sorts?: Sort[];
 }
 
@@ -320,6 +339,7 @@ export interface EffetActif {
   type: string;
   statCiblee: string;
   valeur: number;
+  valeurMin?: number | null;
 }
 
 export type CombatLogType = 'ACTION' | 'DEPLACEMENT' | 'TOUR' | 'MORT' | 'EFFET' | 'EFFET_EXPIRE' | 'FIN';

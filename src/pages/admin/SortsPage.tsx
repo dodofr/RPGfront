@@ -12,6 +12,7 @@ const getEffetNom = (e: NonNullable<Sort['effets']>[number]) => e.nom || e.effet
 const getEffetType = (e: NonNullable<Sort['effets']>[number]) => e.type || e.effet?.type || '';
 const getEffetStat = (e: NonNullable<Sort['effets']>[number]) => e.statCiblee || e.effet?.statCiblee || '';
 const getEffetValeur = (e: NonNullable<Sort['effets']>[number]) => e.valeur ?? e.effet?.valeur ?? 0;
+const getEffetValeurMin = (e: NonNullable<Sort['effets']>[number]) => e.valeurMin ?? e.effet?.valeurMin ?? null;
 const getEffetDuree = (e: NonNullable<Sort['effets']>[number]) => e.duree ?? e.effet?.duree ?? 0;
 const getEffetId = (e: NonNullable<Sort['effets']>[number]) => e.effetId || e.effet?.id || 0;
 
@@ -101,7 +102,9 @@ const SortsPage: React.FC = () => {
       render: (item) => {
         const flags: string[] = [];
         if (item.estSoin) flags.push('Soin');
+        if (item.estDispel) flags.push('Dispel');
         if (item.estInvocation) flags.push('Invoc.');
+        if (item.estVolDeVie) flags.push('Vol de vie');
         if (item.tauxEchec > 0) flags.push(`Echec ${Math.round(item.tauxEchec * 100)}%`);
         return flags.join(', ') || '-';
       },
@@ -120,10 +123,12 @@ const SortsPage: React.FC = () => {
           <div className="effect-badges">
             {item.effets.map((e, i) => {
               const type = getEffetType(e);
-              const badgeClass = type === 'DISPEL' ? 'dispel' : type === 'BUFF' ? 'buff' : 'debuff';
+              const badgeClass = type === 'DISPEL' ? 'dispel' : type === 'BUFF' ? 'buff' : type === 'POISON' ? 'poison' : (type === 'POUSSEE' || type === 'ATTIRANCE') ? 'movement' : 'debuff';
+              const valMin = getEffetValeurMin(e);
+              const valDisplay = type === 'POISON' && valMin != null ? `${valMin}-${getEffetValeur(e)} dgts/tour` : `${getEffetValeur(e) > 0 ? '+' : ''}${getEffetValeur(e)} ${getEffetStat(e)}`;
               return (
                 <span key={i} className={`effect-badge ${badgeClass}`}>
-                  {getEffetNom(e)} ({getEffetValeur(e) > 0 ? '+' : ''}{getEffetValeur(e)} {getEffetStat(e)}, {getEffetDuree(e)}t, {Math.round(e.chanceDeclenchement * 100)}%)
+                  {getEffetNom(e)} ({valDisplay}, {getEffetDuree(e)}t, {Math.round(e.chanceDeclenchement * 100)}%)
                 </span>
               );
             })}
@@ -177,7 +182,9 @@ const SortsPage: React.FC = () => {
     { name: 'chanceCritBase', label: 'Chance crit base', type: 'float', defaultValue: 0.01, step: 0.01 },
     { name: 'cooldown', label: 'Cooldown', type: 'number', defaultValue: 0, min: 0 },
     { name: 'estSoin', label: 'Est soin', type: 'checkbox', defaultValue: false },
+    { name: 'estDispel', label: 'Est dispel', type: 'checkbox', defaultValue: false },
     { name: 'estInvocation', label: 'Est invocation', type: 'checkbox', defaultValue: false },
+    { name: 'estVolDeVie', label: 'Vol de vie', type: 'checkbox', defaultValue: false },
     { name: 'tauxEchec', label: 'Taux echec', type: 'float', defaultValue: 0, step: 0.01 },
     { name: 'niveauApprentissage', label: 'Niveau apprentissage', type: 'number', defaultValue: 1, min: 1 },
     {
@@ -264,7 +271,9 @@ const SortsPage: React.FC = () => {
               </div>
               <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 {selectedSort.estSoin && <span className="badge badge-success">Soin</span>}
+                {selectedSort.estDispel && <span className="badge badge-dispel">Dispel</span>}
                 {selectedSort.estInvocation && <span className="badge badge-warning">Invocation</span>}
+                {selectedSort.estVolDeVie && <span className="badge badge-poison">Vol de vie</span>}
                 {selectedSort.tauxEchec > 0 && <span className="badge badge-danger">Echec {Math.round(selectedSort.tauxEchec * 100)}%</span>}
                 {selectedSort.race && <span className="badge badge-secondary">{selectedSort.race.nom}</span>}
                 {selectedSort.zone && <span className="badge badge-secondary">{selectedSort.zone.nom}</span>}
@@ -277,14 +286,14 @@ const SortsPage: React.FC = () => {
                 {selectedSort.effets && selectedSort.effets.length > 0 ? (
                   selectedSort.effets.map((e, i) => {
                     const type = getEffetType(e);
-                    const badgeClass = type === 'DISPEL' ? 'badge-dispel' : type === 'BUFF' ? 'badge-success' : 'badge-danger';
+                    const badgeClass = type === 'DISPEL' ? 'badge-dispel' : type === 'BUFF' ? 'badge-success' : type === 'POISON' ? 'badge-poison' : (type === 'POUSSEE' || type === 'ATTIRANCE') ? 'badge-movement' : 'badge-danger';
                     return (
                       <div key={i} className="sort-item">
                         <div>
                           <span className="sort-name">{getEffetNom(e)}</span>
                           <span className="sort-meta">
                             <span className={`badge ${badgeClass}`}>{type}</span>
-                            <span>{getEffetValeur(e) > 0 ? '+' : ''}{getEffetValeur(e)} {getEffetStat(e)}</span>
+                            <span>{type === 'POISON' && getEffetValeurMin(e) != null ? `${getEffetValeurMin(e)}-${getEffetValeur(e)} dgts/tour` : `${getEffetValeur(e) > 0 ? '+' : ''}${getEffetValeur(e)} ${getEffetStat(e)}`}</span>
                             <span>{getEffetDuree(e)}t</span>
                             <span>{Math.round(e.chanceDeclenchement * 100)}%</span>
                             <span>{e.surCible ? 'Sur cible' : 'Sur lanceur'}</span>

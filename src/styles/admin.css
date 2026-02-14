@@ -297,6 +297,26 @@
   color: var(--info);
 }
 
+.effect-badge.movement {
+  background: rgba(255, 152, 0, 0.3);
+  color: var(--warning);
+}
+
+.badge-movement {
+  background: rgba(255, 152, 0, 0.3);
+  color: var(--warning);
+}
+
+.badge-poison {
+  background: rgba(0, 200, 83, 0.3);
+  color: #00c853;
+}
+
+.effect-badge.poison {
+  background: rgba(0, 200, 83, 0.3);
+  color: #00c853;
+}
+
 /* Equipment grid */
 .equipment-grid {
   display: grid;

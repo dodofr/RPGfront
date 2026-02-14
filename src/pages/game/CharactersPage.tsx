@@ -195,11 +195,12 @@ const CharactersPage: React.FC = () => {
                     {s.estSoin && <span style={{ color: 'var(--success)' }}>Soin</span>}
                     {s.estDispel && <span style={{ color: 'var(--info)' }}>Dispel</span>}
                     {s.estInvocation && <span style={{ color: 'var(--warning)' }}>Invoc.</span>}
+                    {s.estVolDeVie && <span style={{ color: '#00c853' }}>Vol de vie</span>}
                     {s.tauxEchec > 0 && <span style={{ color: 'var(--danger)' }}>Echec {Math.round(s.tauxEchec * 100)}%</span>}
                     {s.effets && s.effets.length > 0 && (
                       <span className="effect-badges">
                         {s.effets.map((e, i) => (
-                          <span key={i} className={`effect-badge ${getEffetType(e) === 'BUFF' ? 'buff' : 'debuff'}`}>
+                          <span key={i} className={`effect-badge ${getEffetType(e) === 'BUFF' ? 'buff' : getEffetType(e) === 'POISON' ? 'poison' : (getEffetType(e) === 'POUSSEE' || getEffetType(e) === 'ATTIRANCE') ? 'movement' : getEffetType(e) === 'DISPEL' ? 'dispel' : 'debuff'}`}>
                             {getEffetNom(e)}
                           </span>
                         ))}
