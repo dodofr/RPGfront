@@ -17,7 +17,8 @@ interface FormModalProps {
   open: boolean;
   title: string;
   fields: FieldDef[];
-  initialValues?: Record<string, unknown>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  initialValues?: any;
   onSubmit: (values: Record<string, unknown>) => void;
   onCancel: () => void;
 }

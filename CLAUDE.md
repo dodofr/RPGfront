@@ -32,11 +32,11 @@ frontend/src/
 ├── api/
 │   ├── client.ts                   # Instance Axios (baseURL: /api)
 │   ├── players.ts                  # CRUD joueurs
-│   ├── characters.ts               # CRUD personnages + sorts + stats
+│   ├── characters.ts               # CRUD personnages + sorts + stats + inventaire + craft + envoi
 │   ├── groups.ts                   # CRUD groupes + navigation
 │   ├── combat.ts                   # Combat (action, move, endTurn, flee)
-│   ├── maps.ts                     # Régions, maps, monstres
-│   ├── static.ts                   # Races, sorts, équipements, effets, zones
+│   ├── maps.ts                     # Régions, maps, monstres + drops
+│   ├── static.ts                   # Races, sorts, équipements, effets, zones, ressources, panoplies, recettes admin
 │   └── donjons.ts                  # Donjons + grilles de combat
 ├── hooks/
 │   ├── usePolling.ts               # Polling générique (interval + enabled)
@@ -47,27 +47,30 @@ frontend/src/
 │   ├── FormModal.tsx               # Modal formulaire dynamique (create/edit)
 │   └── ConfirmDialog.tsx           # Dialog de confirmation suppression
 ├── pages/
-│   ├── admin/                      # 10 pages CRUD
+│   ├── admin/                      # 13 pages CRUD
 │   │   ├── ZonesPage.tsx
 │   │   ├── EffetsPage.tsx
 │   │   ├── RacesPage.tsx
-│   │   ├── EquipementsPage.tsx
+│   │   ├── EquipementsPage.tsx     # + poids, panoplieId, ranges bonusMax
 │   │   ├── SortsPage.tsx           # Charge races + zones pour dropdowns
 │   │   ├── RegionsPage.tsx
 │   │   ├── MapsPage.tsx            # Charge régions pour dropdown
-│   │   ├── MonstresPage.tsx
+│   │   ├── MonstresPage.tsx        # + orMin/orMax, panneau drops
 │   │   ├── GrillesPage.tsx         # Charge maps pour dropdown
-│   │   └── DonjonsPage.tsx         # Charge régions + maps + monstres
+│   │   ├── DonjonsPage.tsx         # Charge régions + maps + monstres
+│   │   ├── RessourcesPage.tsx      # CRUD ressources (nom, poids, premium)
+│   │   ├── PanopliesPage.tsx       # CRUD panoplies + bonus par palier
+│   │   └── RecettesPage.tsx        # CRUD recettes + ingrédients
 │   └── game/                       # 5 pages de jeu
 │       ├── PlayersPage.tsx         # Liste joueurs, création
-│       ├── CharactersPage.tsx      # Personnages, allocation stats
+│       ├── CharactersPage.tsx      # Personnages, stats, inventaire, envoi
 │       ├── GroupsPage.tsx          # Gestion groupes, navigation map
 │       ├── MapPage.tsx             # Exploration, engagement ennemis
-│       └── CombatPage.tsx          # Interface combat complète
+│       └── CombatPage.tsx          # Interface combat + résumé butin
 └── styles/
     ├── index.css                   # Theme dark, layout, formulaires, cards
     ├── combat.css                  # Grille combat, panels, barre sorts
-    └── admin.css                   # Editeur grille, gestion relations
+    └── admin.css                   # Editeur grille, relations, inventaire, modal envoi, butin
 ```
 
 ## Architecture
@@ -107,8 +110,11 @@ function App() { return <RouterProvider router={router} /> }
 | Admin | `/admin/monstres` | Monstres CRUD |
 | Admin | `/admin/grilles` | Grilles de combat CRUD |
 | Admin | `/admin/donjons` | Donjons CRUD |
+| Admin | `/admin/ressources` | Ressources CRUD |
+| Admin | `/admin/panoplies` | Panoplies + bonus par palier |
+| Admin | `/admin/recettes` | Recettes + ingrédients |
 | Jeu | `/game/players` | Gestion joueurs |
-| Jeu | `/game/characters` | Personnages + stats |
+| Jeu | `/game/characters` | Personnages + stats + inventaire |
 | Jeu | `/game/groups` | Groupes + navigation |
 | Jeu | `/game/map` | Exploration carte |
 | Jeu | `/game/combat` | Liste combats |
@@ -119,6 +125,15 @@ function App() { return <RouterProvider router={router} /> }
 Instance Axios centralisée dans `api/client.ts` avec `baseURL: '/api'`. Le proxy Vite redirige `/api` vers `http://localhost:3000`.
 
 Chaque module API exporte un objet avec : `getAll()`, `getById()`, `create()`, `update()`, `remove()` + méthodes spécifiques.
+
+**Modules API** :
+- `players.ts` : `playersApi` — CRUD joueurs + characters/groups
+- `characters.ts` : `charactersApi` — CRUD + spells + stats + inventaire (getInventory, equipItem, unequipItem, destroyItem, destroyResource, sendToCharacter) + craft
+- `groups.ts` : `groupsApi` — CRUD + navigation (move, enter-map, use-connection, move-direction, leave)
+- `combat.ts` : `combatApi` — CRUD + action, move, endTurn, flee
+- `maps.ts` : `regionsApi` (+ monstres) | `mapsApi` (+ connections, spawn, engage, respawn, grilles) | `monstresApi` (+ sorts, drops)
+- `static.ts` : `racesApi` | `sortsApi` (+ effects) | `equipmentApi` (+ lignes) | `effetsApi` | `zonesApi` | `resourcesApi` | `setsApi` (+ bonuses) | `recipesAdminApi` (+ ingredients)
+- `donjons.ts` : `donjonsApi` + `grillesApi`
 
 ### Hook useCrud
 
@@ -148,6 +163,12 @@ Toutes suivent le même pattern :
 
 Les pages complexes (Sorts, Donjons) chargent des données liées pour peupler les dropdowns.
 
+Pages avec panneau détail (sélection ligne → détail en dessous du tableau) :
+- **EquipementsPage** : Détail arme (stats base + lignes de dégâts), formulaire avec poids/panoplieId/bonusMax ranges
+- **MonstresPage** : Tabs ennemis/invocations, détail (stats + sorts + drops + régions). Panneau drops : ajout ressource/équipement avec taux + quantité min-max
+- **PanopliesPage** : Détail (équipements liés + bonus par palier avec CRUD)
+- **RecettesPage** : Détail (infos + ingrédients avec ajout/suppression inline)
+
 ### FormModal - Définition des champs
 
 ```typescript
@@ -166,10 +187,15 @@ Supporte : `text`, `number`, `select`, `checkbox`, `textarea`, et `showIf` pour 
 ### Pages Jeu
 
 - **PlayersPage** : Cards avec création inline
-- **CharactersPage** : Détails stats, allocation de points via `POST /characters/:id/allocate-stats`
+- **CharactersPage** : Détails stats, allocation de points, sorts appris, équipement legacy (slots), section inventaire complète :
+  - Header : or + barre poids
+  - Items : equiper/déséquiper/supprimer (avec ConfirmDialog)
+  - Ressources : nom × quantité, suppression
+  - Bonus panoplie : affichage si setBonuses actifs
+  - Modal envoi : sélection destinataire + or + items (checkboxes) + ressources (input quantité)
 - **GroupsPage** : Gestion membres (max 6), navigation directionnelle (N/S/E/O), connexions
 - **MapPage** : Info map courante, groupes ennemis visibles, engagement combat
-- **CombatPage** : Interface complète (voir section Combat)
+- **CombatPage** : Interface complète (voir section Combat) + panneau "Butin" en cas de victoire (parse les logs FIN contenant "Butin")
 
 ## Interface Combat
 

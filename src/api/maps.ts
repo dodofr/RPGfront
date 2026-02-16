@@ -1,5 +1,5 @@
 import api from './client';
-import type { Region, GameMap, MonsterTemplate } from '../types';
+import type { Region, GameMap, MonsterTemplate, MonstreDrop } from '../types';
 
 export const regionsApi = {
   getAll: () => api.get<Region[]>('/regions').then(r => r.data),
@@ -40,4 +40,10 @@ export const monstresApi = {
     api.post(`/monstres/${monstreId}/sorts`, data).then(r => r.data),
   removeSort: (monstreId: number, sortId: number) =>
     api.delete(`/monstres/${monstreId}/sorts/${sortId}`),
+  addDrop: (monstreId: number, data: Partial<MonstreDrop>) =>
+    api.post<MonstreDrop>(`/monstres/${monstreId}/drops`, data).then(r => r.data),
+  updateDrop: (monstreId: number, dropId: number, data: Partial<MonstreDrop>) =>
+    api.patch<MonstreDrop>(`/monstres/${monstreId}/drops/${dropId}`, data).then(r => r.data),
+  removeDrop: (monstreId: number, dropId: number) =>
+    api.delete(`/monstres/${monstreId}/drops/${dropId}`),
 };

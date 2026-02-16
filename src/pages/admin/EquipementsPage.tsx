@@ -3,8 +3,8 @@ import DataTable, { type Column } from '../../components/DataTable';
 import FormModal, { type FieldDef } from '../../components/FormModal';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { useCrud } from '../../hooks/useCrud';
-import { equipmentApi, zonesApi } from '../../api/static';
-import type { Equipment, Zone, LigneDegatsArme, StatType } from '../../types';
+import { equipmentApi, zonesApi, setsApi } from '../../api/static';
+import type { Equipment, Zone, StatType, Panoplie } from '../../types';
 import '../../styles/admin.css';
 
 const STAT_OPTIONS: { value: StatType; label: string }[] = [
@@ -19,6 +19,7 @@ const STAT_OPTIONS: { value: StatType; label: string }[] = [
 const EquipementsPage: React.FC = () => {
   const { items, loading, create, update, remove, refresh } = useCrud(equipmentApi);
   const [zones, setZones] = useState<Zone[]>([]);
+  const [panoplies, setPanoplies] = useState<Panoplie[]>([]);
   const [selected, setSelected] = useState<Equipment | null>(null);
 
   // Ligne add form
@@ -26,6 +27,7 @@ const EquipementsPage: React.FC = () => {
 
   useEffect(() => {
     zonesApi.getAll().then(setZones);
+    setsApi.getAll().then(setPanoplies);
   }, []);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Equipment | null>(null);
@@ -36,13 +38,22 @@ const EquipementsPage: React.FC = () => {
     setSelected(eq);
   };
 
+  const formatStat = (item: Equipment, stat: string, max: string) => {
+    const rec = item as unknown as Record<string, number | null>;
+    const val = rec[stat] ?? 0;
+    const maxVal = rec[max];
+    if (maxVal && maxVal > 0 && maxVal !== val) return `${val}-${maxVal}`;
+    return val ? String(val) : '';
+  };
+
   const columns: Column<Equipment>[] = [
     { key: 'id', header: 'ID' },
     { key: 'nom', header: 'Nom' },
     { key: 'slot', header: 'Slot' },
-    { key: 'niveauMinimum', header: 'Niveau min' },
-    { key: 'bonusForce', header: 'Force' },
-    { key: 'bonusIntelligence', header: 'Intelligence' },
+    { key: 'niveauMinimum', header: 'Niv.' },
+    { key: 'poids', header: 'Poids' },
+    { key: 'bonusForce', header: 'FOR', render: (item) => formatStat(item, 'bonusForce', 'bonusForceMax') },
+    { key: 'bonusIntelligence', header: 'INT', render: (item) => formatStat(item, 'bonusIntelligence', 'bonusIntelligenceMax') },
   ];
 
   const fields: FieldDef[] = [
@@ -65,15 +76,33 @@ const EquipementsPage: React.FC = () => {
       ],
     },
     { name: 'niveauMinimum', label: 'Niveau minimum', type: 'number', defaultValue: 1, min: 1 },
-    { name: 'bonusForce', label: 'Bonus Force', type: 'number', defaultValue: 0 },
-    { name: 'bonusIntelligence', label: 'Bonus Intelligence', type: 'number', defaultValue: 0 },
-    { name: 'bonusDexterite', label: 'Bonus Dexterite', type: 'number', defaultValue: 0 },
-    { name: 'bonusAgilite', label: 'Bonus Agilite', type: 'number', defaultValue: 0 },
-    { name: 'bonusVie', label: 'Bonus Vie', type: 'number', defaultValue: 0 },
-    { name: 'bonusChance', label: 'Bonus Chance', type: 'number', defaultValue: 0 },
-    { name: 'bonusPA', label: 'Bonus PA', type: 'number', defaultValue: 0 },
-    { name: 'bonusPM', label: 'Bonus PM', type: 'number', defaultValue: 0 },
-    { name: 'bonusPO', label: 'Bonus PO', type: 'number', defaultValue: 0 },
+    { name: 'poids', label: 'Poids', type: 'number', defaultValue: 1, min: 0 },
+    {
+      name: 'panoplieId',
+      label: 'Panoplie',
+      type: 'select',
+      options: [{ value: '', label: '-- Aucune --' }, ...panoplies.map(p => ({ value: p.id, label: p.nom }))],
+    },
+    { name: 'bonusForce', label: 'Bonus Force (min)', type: 'number', defaultValue: 0 },
+    { name: 'bonusForceMax', label: 'Bonus Force (max)', type: 'number' },
+    { name: 'bonusIntelligence', label: 'Bonus Intelligence (min)', type: 'number', defaultValue: 0 },
+    { name: 'bonusIntelligenceMax', label: 'Bonus Intelligence (max)', type: 'number' },
+    { name: 'bonusDexterite', label: 'Bonus Dexterite (min)', type: 'number', defaultValue: 0 },
+    { name: 'bonusDexteriteMax', label: 'Bonus Dexterite (max)', type: 'number' },
+    { name: 'bonusAgilite', label: 'Bonus Agilite (min)', type: 'number', defaultValue: 0 },
+    { name: 'bonusAgiliteMax', label: 'Bonus Agilite (max)', type: 'number' },
+    { name: 'bonusVie', label: 'Bonus Vie (min)', type: 'number', defaultValue: 0 },
+    { name: 'bonusVieMax', label: 'Bonus Vie (max)', type: 'number' },
+    { name: 'bonusChance', label: 'Bonus Chance (min)', type: 'number', defaultValue: 0 },
+    { name: 'bonusChanceMax', label: 'Bonus Chance (max)', type: 'number' },
+    { name: 'bonusPA', label: 'Bonus PA (min)', type: 'number', defaultValue: 0 },
+    { name: 'bonusPAMax', label: 'Bonus PA (max)', type: 'number' },
+    { name: 'bonusPM', label: 'Bonus PM (min)', type: 'number', defaultValue: 0 },
+    { name: 'bonusPMMax', label: 'Bonus PM (max)', type: 'number' },
+    { name: 'bonusPO', label: 'Bonus PO (min)', type: 'number', defaultValue: 0 },
+    { name: 'bonusPOMax', label: 'Bonus PO (max)', type: 'number' },
+    { name: 'bonusCritique', label: 'Bonus Critique % (min)', type: 'number', defaultValue: 0 },
+    { name: 'bonusCritiqueMax', label: 'Bonus Critique % (max)', type: 'number' },
     // Weapon-specific fields (shown only when slot is ARME)
     {
       name: 'degatsMin',

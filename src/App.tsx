@@ -13,6 +13,9 @@ import MonstresPage from './pages/admin/MonstresPage'
 import GrillesPage from './pages/admin/GrillesPage'
 import GridEditorPage from './pages/admin/GridEditorPage'
 import DonjonsPage from './pages/admin/DonjonsPage'
+import RessourcesPage from './pages/admin/RessourcesPage'
+import PanopliesPage from './pages/admin/PanopliesPage'
+import RecettesPage from './pages/admin/RecettesPage'
 
 // Game pages
 import PlayersPage from './pages/game/PlayersPage'
@@ -39,6 +42,9 @@ const router = createBrowserRouter([
       { path: 'admin/grilles', element: <GrillesPage /> },
       { path: 'admin/grilles/:id/edit', element: <GridEditorPage /> },
       { path: 'admin/donjons', element: <DonjonsPage /> },
+      { path: 'admin/ressources', element: <RessourcesPage /> },
+      { path: 'admin/panoplies', element: <PanopliesPage /> },
+      { path: 'admin/recettes', element: <RecettesPage /> },
       // Game
       { path: 'game/players', element: <PlayersPage /> },
       { path: 'game/characters', element: <CharactersPage /> },

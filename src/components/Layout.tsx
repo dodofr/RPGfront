@@ -12,6 +12,9 @@ const adminLinks = [
   { to: '/admin/monstres', label: 'Monstres' },
   { to: '/admin/grilles', label: 'Grilles' },
   { to: '/admin/donjons', label: 'Donjons' },
+  { to: '/admin/ressources', label: 'Ressources' },
+  { to: '/admin/panoplies', label: 'Panoplies' },
+  { to: '/admin/recettes', label: 'Recettes' },
 ];
 
 const gameLinks = [

@@ -4,8 +4,8 @@ import FormModal, { type FieldDef } from '../../components/FormModal';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { useCrud } from '../../hooks/useCrud';
 import { monstresApi } from '../../api/maps';
-import { sortsApi } from '../../api/static';
-import type { MonsterTemplate, Sort } from '../../types';
+import { sortsApi, equipmentApi, resourcesApi } from '../../api/static';
+import type { MonsterTemplate, Sort, Equipment, Ressource } from '../../types';
 import '../../styles/admin.css';
 
 type MonsterTab = 'ennemis' | 'invocations';
@@ -20,9 +20,20 @@ const MonstresPage: React.FC = () => {
   const [allSorts, setAllSorts] = useState<Sort[]>([]);
   const [addSortId, setAddSortId] = useState<number>(0);
   const [addSortPrio, setAddSortPrio] = useState<number>(1);
+  const [allEquipment, setAllEquipment] = useState<Equipment[]>([]);
+  const [allResources, setAllResources] = useState<Ressource[]>([]);
+  const [dropType, setDropType] = useState<'ressource' | 'equipement'>('ressource');
+  const [dropTargetId, setDropTargetId] = useState<number>(0);
+  const [dropRate, setDropRate] = useState<number>(0.3);
+  const [dropMin, setDropMin] = useState<number>(1);
+  const [dropMax, setDropMax] = useState<number>(1);
 
   useEffect(() => {
-    sortsApi.getAll().then(setAllSorts);
+    Promise.all([sortsApi.getAll(), equipmentApi.getAll(), resourcesApi.getAll()]).then(([s, e, r]) => {
+      setAllSorts(s);
+      setAllEquipment(e);
+      setAllResources(r);
+    });
   }, []);
 
   const isInvocation = (m: MonsterTemplate) => m.xpRecompense === 0 || m.pvScalingInvocation !== null;
@@ -46,6 +57,28 @@ const MonstresPage: React.FC = () => {
   const handleRemoveSort = async (sortId: number) => {
     if (!selectedMonster) return;
     await monstresApi.removeSort(selectedMonster.id, sortId);
+    await selectMonster(selectedMonster.id);
+    refresh();
+  };
+
+  const handleAddDrop = async () => {
+    if (!selectedMonster || !dropTargetId) return;
+    const data: Record<string, unknown> = {
+      tauxDrop: dropRate,
+      quantiteMin: dropMin,
+      quantiteMax: dropMax,
+    };
+    if (dropType === 'ressource') data.ressourceId = dropTargetId;
+    else data.equipementId = dropTargetId;
+    await monstresApi.addDrop(selectedMonster.id, data as any);
+    await selectMonster(selectedMonster.id);
+    refresh();
+    setDropTargetId(0);
+  };
+
+  const handleRemoveDrop = async (dropId: number) => {
+    if (!selectedMonster) return;
+    await monstresApi.removeDrop(selectedMonster.id, dropId);
     await selectMonster(selectedMonster.id);
     refresh();
   };
@@ -81,6 +114,8 @@ const MonstresPage: React.FC = () => {
     { name: 'pmBase', label: 'PM base', type: 'number', defaultValue: 3, min: 1 },
     { name: 'niveauBase', label: 'Niveau base', type: 'number', defaultValue: 1, min: 1 },
     { name: 'xpRecompense', label: 'XP recompense', type: 'number', defaultValue: 10, min: 0 },
+    { name: 'orMin', label: 'Or min', type: 'number', defaultValue: 0, min: 0 },
+    { name: 'orMax', label: 'Or max', type: 'number', defaultValue: 0, min: 0 },
     {
       name: 'iaType',
       label: 'Type IA',
@@ -213,6 +248,45 @@ const MonstresPage: React.FC = () => {
                   placeholder="Prio"
                 />
                 <button className="btn btn-sm btn-success" onClick={handleAddSort} disabled={!addSortId}>+ Ajouter</button>
+              </div>
+            </div>
+
+            <div className="detail-section">
+              <h4>Drops ({selectedMonster.drops?.length || 0})</h4>
+              <div className="sort-list">
+                {selectedMonster.drops && selectedMonster.drops.length > 0 ? (
+                  selectedMonster.drops.map(d => (
+                    <div key={d.id} className="sort-item">
+                      <div>
+                        <span className="sort-name">
+                          {d.ressource ? d.ressource.nom : d.equipement ? d.equipement.nom : '?'}
+                        </span>
+                        <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--text-muted)' }}>
+                          {d.ressource ? 'Ressource' : 'Equipement'} | {Math.round(d.tauxDrop * 100)}% | x{d.quantiteMin}-{d.quantiteMax}
+                        </span>
+                      </div>
+                      <button className="btn btn-sm btn-danger" onClick={() => handleRemoveDrop(d.id)}>X</button>
+                    </div>
+                  ))
+                ) : (
+                  <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Aucun drop</div>
+                )}
+              </div>
+              <div className="inline-add" style={{ flexWrap: 'wrap' }}>
+                <select value={dropType} onChange={e => { setDropType(e.target.value as 'ressource' | 'equipement'); setDropTargetId(0); }}>
+                  <option value="ressource">Ressource</option>
+                  <option value="equipement">Equipement</option>
+                </select>
+                <select value={dropTargetId} onChange={e => setDropTargetId(Number(e.target.value))}>
+                  <option value={0}>-- Choisir --</option>
+                  {(dropType === 'ressource' ? allResources : allEquipment).map(item => (
+                    <option key={item.id} value={item.id}>{item.nom}</option>
+                  ))}
+                </select>
+                <input type="number" value={dropRate} onChange={e => setDropRate(Number(e.target.value))} step={0.05} min={0} max={1} style={{ width: 60 }} title="Taux" />
+                <input type="number" value={dropMin} onChange={e => setDropMin(Number(e.target.value))} min={1} style={{ width: 50 }} title="Min" />
+                <input type="number" value={dropMax} onChange={e => setDropMax(Number(e.target.value))} min={1} style={{ width: 50 }} title="Max" />
+                <button className="btn btn-sm btn-success" onClick={handleAddDrop} disabled={!dropTargetId}>+ Ajouter</button>
               </div>
             </div>
 

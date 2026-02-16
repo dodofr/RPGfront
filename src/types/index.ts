@@ -1,5 +1,5 @@
 // Enums
-export type StatType = 'FORCE' | 'INTELLIGENCE' | 'DEXTERITE' | 'AGILITE' | 'VIE' | 'CHANCE' | 'PA' | 'PM' | 'PO';
+export type StatType = 'FORCE' | 'INTELLIGENCE' | 'DEXTERITE' | 'AGILITE' | 'VIE' | 'CHANCE' | 'PA' | 'PM' | 'PO' | 'CRITIQUE';
 export type SortType = 'ARME' | 'SORT';
 export type SlotType = 'ARME' | 'COIFFE' | 'AMULETTE' | 'BOUCLIER' | 'HAUT' | 'BAS' | 'ANNEAU1' | 'ANNEAU2' | 'FAMILIER';
 export type EffetType = 'BUFF' | 'DEBUFF' | 'DISPEL' | 'POUSSEE' | 'ATTIRANCE' | 'POISON';
@@ -93,6 +93,8 @@ export interface Equipment {
   nom: string;
   slot: SlotType;
   niveauMinimum: number;
+  poids: number;
+  panoplieId: number | null;
   bonusForce: number;
   bonusIntelligence: number;
   bonusDexterite: number;
@@ -102,6 +104,16 @@ export interface Equipment {
   bonusPA: number;
   bonusPM: number;
   bonusPO: number;
+  bonusForceMax: number | null;
+  bonusIntelligenceMax: number | null;
+  bonusDexteriteMax: number | null;
+  bonusAgiliteMax: number | null;
+  bonusVieMax: number | null;
+  bonusChanceMax: number | null;
+  bonusPAMax: number | null;
+  bonusPMMax: number | null;
+  bonusPOMax: number | null;
+  bonusCritiqueMax: number | null;
   degatsMin: number | null;
   degatsMax: number | null;
   degatsCritMin: number | null;
@@ -117,6 +129,7 @@ export interface Equipment {
   tauxEchec: number | null;
   estVolDeVie?: boolean;
   bonusCrit: number | null;
+  bonusCritique: number;
   lignesDegats?: LigneDegatsArme[];
 }
 
@@ -206,10 +219,13 @@ export interface MonsterTemplate {
   pmBase: number;
   niveauBase: number;
   xpRecompense: number;
+  orMin: number;
+  orMax: number;
   iaType: IAType;
   pvScalingInvocation: number | null;
   regions?: { region: { id: number; nom: string } }[];
   sorts?: MonstreSort[];
+  drops?: MonstreDrop[];
 }
 
 export interface MonstreSort {
@@ -257,6 +273,7 @@ export interface TotalStats {
   pa: number;
   pm: number;
   po: number;
+  bonusCritique: number;
   pvMax: number;
 }
 
@@ -320,6 +337,7 @@ export interface CombatEntity {
   monstreTemplateId: number | null;
   iaType: string | null;
   poBonus: number;
+  bonusCritique: number;
   sorts?: Sort[];
 }
 
@@ -413,4 +431,124 @@ export interface GrilleSpawn {
   y: number;
   equipe: number;
   ordre: number;
+}
+
+// ============ Ressources / Drops / Inventaire / Craft / Panoplies ============
+
+export interface Ressource {
+  id: number;
+  nom: string;
+  description?: string | null;
+  poids: number;
+  estPremium: boolean;
+}
+
+export interface MonstreDrop {
+  id: number;
+  monstreId: number;
+  ressourceId: number | null;
+  equipementId: number | null;
+  tauxDrop: number;
+  quantiteMin: number;
+  quantiteMax: number;
+  ressource?: Ressource | null;
+  equipement?: Equipment | null;
+}
+
+export interface Panoplie {
+  id: number;
+  nom: string;
+  description?: string | null;
+  equipements?: Equipment[];
+  bonus?: PanoplieBonus[];
+}
+
+export interface PanoplieBonus {
+  id: number;
+  panoplieId: number;
+  nombrePieces: number;
+  bonusForce: number;
+  bonusIntelligence: number;
+  bonusDexterite: number;
+  bonusAgilite: number;
+  bonusVie: number;
+  bonusChance: number;
+  bonusPA: number;
+  bonusPM: number;
+  bonusPO: number;
+  bonusCritique: number;
+}
+
+export interface Recette {
+  id: number;
+  nom: string;
+  description?: string | null;
+  equipementId: number;
+  equipement?: Equipment;
+  niveauMinimum: number;
+  coutOr: number;
+  ingredients?: RecetteIngredient[];
+}
+
+export interface RecetteIngredient {
+  id: number;
+  recetteId: number;
+  ressourceId: number;
+  quantite: number;
+  ressource?: Ressource;
+}
+
+export interface InventoryItemInstance {
+  id: number;
+  personnageId: number;
+  equipementId: number;
+  equipement?: Equipment;
+  nom: string;
+  slot: SlotType;
+  poids: number;
+  bonusForce: number;
+  bonusIntelligence: number;
+  bonusDexterite: number;
+  bonusAgilite: number;
+  bonusVie: number;
+  bonusChance: number;
+  bonusPA: number;
+  bonusPM: number;
+  bonusPO: number;
+  bonusCritique: number;
+  estEquipe: boolean;
+  panoplieId: number | null;
+}
+
+export interface ResourceStack {
+  ressourceId: number;
+  nom: string;
+  description?: string | null;
+  poids: number;
+  quantite: number;
+}
+
+export interface SetBonusInfo {
+  panoplieId: number;
+  nom: string;
+  piecesEquipees: number;
+  bonusForce: number;
+  bonusIntelligence: number;
+  bonusDexterite: number;
+  bonusAgilite: number;
+  bonusVie: number;
+  bonusChance: number;
+  bonusPA: number;
+  bonusPM: number;
+  bonusPO: number;
+  bonusCritique: number;
+}
+
+export interface InventoryState {
+  items: InventoryItemInstance[];
+  ressources: ResourceStack[];
+  poidsActuel: number;
+  poidsMax: number;
+  or: number;
+  setBonuses?: SetBonusInfo[];
 }

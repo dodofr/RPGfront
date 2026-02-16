@@ -49,6 +49,7 @@ const STAT_LABELS: Record<string, string> = {
   PA: 'PA',
   PM: 'PM',
   PO: 'PO',
+  CRITIQUE: 'Critique',
 };
 
 const ZONE_LABELS: Record<string, string> = {
@@ -420,6 +421,21 @@ const CombatPage: React.FC = () => {
       {isFinished && (
         <div className={`combat-result ${enemiesAlive.length === 0 ? 'victory' : 'defeat'}`}>
           <h2>{enemiesAlive.length === 0 ? 'Victoire!' : 'Defaite...'}</h2>
+
+          {/* Loot summary */}
+          {enemiesAlive.length === 0 && (() => {
+            const lootLogs = log.filter(l => l.type === 'FIN' && l.message.includes('Butin'));
+            if (lootLogs.length === 0) return null;
+            return (
+              <div className="loot-panel">
+                <h3>Butin</h3>
+                {lootLogs.map(l => (
+                  <div key={l.id} className="loot-line">{l.message}</div>
+                ))}
+              </div>
+            );
+          })()}
+
           <button className="btn btn-primary" onClick={() => navigate('/game/combat')}>Retour</button>
         </div>
       )}

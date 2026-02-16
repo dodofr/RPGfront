@@ -1,5 +1,5 @@
 import api from './client';
-import type { Race, Sort, Equipment, Effet, Zone, SortEffet, LigneDegatsArme } from '../types';
+import type { Race, Sort, Equipment, Effet, Zone, SortEffet, LigneDegatsArme, Ressource, Panoplie, PanoplieBonus, Recette, RecetteIngredient } from '../types';
 
 export const racesApi = {
   getAll: () => api.get<Race[]>('/races').then(r => r.data),
@@ -49,4 +49,38 @@ export const zonesApi = {
   create: (data: Partial<Zone>) => api.post<Zone>('/zones', data).then(r => r.data),
   update: (id: number, data: Partial<Zone>) => api.patch<Zone>(`/zones/${id}`, data).then(r => r.data),
   remove: (id: number) => api.delete(`/zones/${id}`),
+};
+
+export const resourcesApi = {
+  getAll: () => api.get<Ressource[]>('/resources').then(r => r.data),
+  getById: (id: number) => api.get<Ressource>(`/resources/${id}`).then(r => r.data),
+  create: (data: Partial<Ressource>) => api.post<Ressource>('/resources', data).then(r => r.data),
+  update: (id: number, data: Partial<Ressource>) => api.patch<Ressource>(`/resources/${id}`, data).then(r => r.data),
+  remove: (id: number) => api.delete(`/resources/${id}`),
+};
+
+export const setsApi = {
+  getAll: () => api.get<Panoplie[]>('/sets').then(r => r.data),
+  getById: (id: number) => api.get<Panoplie>(`/sets/${id}`).then(r => r.data),
+  create: (data: Partial<Panoplie>) => api.post<Panoplie>('/sets', data).then(r => r.data),
+  update: (id: number, data: Partial<Panoplie>) => api.patch<Panoplie>(`/sets/${id}`, data).then(r => r.data),
+  remove: (id: number) => api.delete(`/sets/${id}`),
+  addBonus: (setId: number, data: Partial<PanoplieBonus>) =>
+    api.post<PanoplieBonus>(`/sets/${setId}/bonuses`, data).then(r => r.data),
+  updateBonus: (setId: number, bonusId: number, data: Partial<PanoplieBonus>) =>
+    api.patch<PanoplieBonus>(`/sets/${setId}/bonuses/${bonusId}`, data).then(r => r.data),
+  removeBonus: (setId: number, bonusId: number) =>
+    api.delete(`/sets/${setId}/bonuses/${bonusId}`),
+};
+
+export const recipesAdminApi = {
+  getAll: () => api.get<Recette[]>('/admin/recipes').then(r => r.data),
+  getById: (id: number) => api.get<Recette>(`/admin/recipes/${id}`).then(r => r.data),
+  create: (data: Partial<Recette>) => api.post<Recette>('/admin/recipes', data).then(r => r.data),
+  update: (id: number, data: Partial<Recette>) => api.patch<Recette>(`/admin/recipes/${id}`, data).then(r => r.data),
+  remove: (id: number) => api.delete(`/admin/recipes/${id}`),
+  addIngredient: (recetteId: number, data: { ressourceId: number; quantite: number }) =>
+    api.post<RecetteIngredient>(`/admin/recipes/${recetteId}/ingredients`, data).then(r => r.data),
+  removeIngredient: (recetteId: number, ingredientId: number) =>
+    api.delete(`/admin/recipes/${recetteId}/ingredients/${ingredientId}`),
 };
