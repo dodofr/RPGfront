@@ -28,6 +28,8 @@ export const mapsApi = {
     api.post(`/maps/${mapId}/engage`, data).then(r => r.data),
   respawn: (mapId: number) => api.post(`/maps/${mapId}/respawn`).then(r => r.data),
   getGrilles: (mapId: number) => api.get<import('../types').GrilleCombat[]>(`/maps/${mapId}/grilles`).then(r => r.data),
+  updateWorldPositions: (positions: { mapId: number; worldX: number; worldY: number }[]) =>
+    api.put<GameMap[]>('/maps/world-positions', { positions }).then(r => r.data),
 };
 
 export const monstresApi = {

@@ -2,12 +2,17 @@ import React, { useState, useEffect } from 'react';
 import { groupsApi } from '../../api/groups';
 import { playersApi } from '../../api/players';
 import { charactersApi } from '../../api/characters';
-import type { Group, Player, Character, Direction } from '../../types';
+import type { Group, Player, Character } from '../../types';
 import FormModal, { type FieldDef } from '../../components/FormModal';
 import { useNavigate } from 'react-router-dom';
 
-const GroupsPage: React.FC = () => {
+interface GroupsPageProps {
+  playerId?: number;
+}
+
+const GroupsPage: React.FC<GroupsPageProps> = ({ playerId }) => {
   const [groups, setGroups] = useState<Group[]>([]);
+  const [allGroups, setAllGroups] = useState<Group[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
   const [allChars, setAllChars] = useState<Character[]>([]);
   const [selected, setSelected] = useState<Group | null>(null);
@@ -20,15 +25,16 @@ const GroupsPage: React.FC = () => {
     const [grps, pls, chars] = await Promise.all([
       groupsApi.getAll(),
       playersApi.getAll(),
-      charactersApi.getAll(),
+      playerId ? playersApi.getCharacters(playerId) : charactersApi.getAll(),
     ]);
-    setGroups(grps);
+    setAllGroups(grps);
+    setGroups(playerId ? grps.filter(g => g.joueurId === playerId) : grps);
     setPlayers(pls);
     setAllChars(chars);
     setLoading(false);
   };
 
-  useEffect(() => { refresh(); }, []);
+  useEffect(() => { refresh(); }, [playerId]);
 
   const selectGroup = async (id: number) => {
     const g = await groupsApi.getById(id);
@@ -39,6 +45,7 @@ const GroupsPage: React.FC = () => {
     if (!selected) return;
     try {
       await groupsApi.addCharacter(selected.id, personnageId);
+      await refresh();
       selectGroup(selected.id);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error';
@@ -49,50 +56,32 @@ const GroupsPage: React.FC = () => {
   const removeChar = async (charId: number) => {
     if (!selected) return;
     await groupsApi.removeCharacter(selected.id, charId);
+    await refresh();
     selectGroup(selected.id);
-  };
-
-  const moveDir = async (dir: Direction) => {
-    if (!selected) return;
-    try {
-      const result = await groupsApi.moveDirection(selected.id, dir);
-      if (result.combat) {
-        navigate(`/game/combat/${result.combat.id}`);
-        return;
-      }
-      selectGroup(selected.id);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Error';
-      alert(msg);
-    }
-  };
-
-  const enterMap = async (mapId: number) => {
-    if (!selected) return;
-    try {
-      const result = await groupsApi.enterMap(selected.id, mapId);
-      if (result.combat) {
-        navigate(`/game/combat/${result.combat.id}`);
-        return;
-      }
-      selectGroup(selected.id);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Error';
-      alert(msg);
-    }
   };
 
   const createFields: FieldDef[] = [
     { name: 'nom', label: 'Nom', type: 'text', required: true },
     { name: 'joueurId', label: 'Joueur', type: 'select', required: true,
-      options: players.map(p => ({ value: p.id, label: p.nom })) },
+      options: players.map(p => ({ value: p.id, label: p.nom })),
+      ...(playerId ? { defaultValue: playerId } : {}) },
   ];
 
   if (loading) return <div className="loading">Chargement...</div>;
 
+  // Build set of all character IDs already in ANY group
+  const charsInGroups = new Set<number>();
+  for (const g of allGroups) {
+    if (g.personnages) {
+      for (const p of g.personnages) {
+        charsInGroups.add(p.personnage.id);
+      }
+    }
+  }
+
   const groupChars = selected?.personnages?.map(p => p.personnage) || [];
-  const groupCharIds = new Set(groupChars.map(c => c.id));
-  const availableChars = allChars.filter(c => !groupCharIds.has(c.id));
+  // Exclude chars already in ANY group (not just the selected one)
+  const availableChars = allChars.filter(c => !charsInGroups.has(c.id));
 
   return (
     <div>
@@ -107,8 +96,7 @@ const GroupsPage: React.FC = () => {
             <h4>{g.nom}</h4>
             <div className="meta">
               {g.personnages?.length || 0} persos |
-              Map: {g.mapId ?? 'Aucune'} |
-              Pos: ({g.positionX}, {g.positionY})
+              Map: {g.mapId ?? 'Aucune'}
             </div>
           </div>
         ))}
@@ -116,7 +104,12 @@ const GroupsPage: React.FC = () => {
 
       {selected && (
         <div style={{ marginTop: 24 }}>
-          <h2>Groupe: {selected.nom}</h2>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h2>Groupe: {selected.nom}</h2>
+            <button className="btn btn-success" onClick={() => navigate(`/game/adventure?groupId=${selected.id}`)}>
+              Partir a l'aventure
+            </button>
+          </div>
           <p className="meta">Map: {selected.map?.nom ?? 'Aucune'} | Position: ({selected.positionX}, {selected.positionY})</p>
 
           {/* Members */}
@@ -142,35 +135,6 @@ const GroupsPage: React.FC = () => {
                 ))}
               </div>
             </div>
-          )}
-
-          {/* Navigation */}
-          <h3 style={{ marginTop: 16 }}>Navigation</h3>
-          {!selected.mapId ? (
-            <div style={{ marginTop: 8 }}>
-              <p className="meta">Le groupe n'est sur aucune map. Entrer sur une map:</p>
-              <div className="inline-form" style={{ marginTop: 8 }}>
-                <input id="mapIdInput" type="number" placeholder="Map ID" style={{ width: 100 }} />
-                <button className="btn btn-primary" onClick={() => {
-                  const input = document.getElementById('mapIdInput') as HTMLInputElement;
-                  const mapId = parseInt(input.value);
-                  if (!isNaN(mapId)) enterMap(mapId);
-                }}>Entrer</button>
-              </div>
-            </div>
-          ) : (
-            <>
-              <div className="direction-controls">
-                <button className="btn btn-info btn-nord" onClick={() => moveDir('NORD')}>N</button>
-                <button className="btn btn-info btn-ouest" onClick={() => moveDir('OUEST')}>O</button>
-                <button className="btn btn-info btn-est" onClick={() => moveDir('EST')}>E</button>
-                <button className="btn btn-info btn-sud" onClick={() => moveDir('SUD')}>S</button>
-              </div>
-              <button className="btn btn-secondary" onClick={async () => {
-                await groupsApi.leaveMap(selected.id);
-                selectGroup(selected.id);
-              }}>Quitter la map</button>
-            </>
           )}
         </div>
       )}

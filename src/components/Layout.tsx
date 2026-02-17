@@ -1,47 +1,28 @@
 import React from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
-
-const adminLinks = [
-  { to: '/admin/races', label: 'Races' },
-  { to: '/admin/sorts', label: 'Sorts' },
-  { to: '/admin/equipements', label: 'Equipements' },
-  { to: '/admin/effets', label: 'Effets' },
-  { to: '/admin/zones', label: 'Zones' },
-  { to: '/admin/regions', label: 'Regions' },
-  { to: '/admin/maps', label: 'Maps' },
-  { to: '/admin/monstres', label: 'Monstres' },
-  { to: '/admin/grilles', label: 'Grilles' },
-  { to: '/admin/donjons', label: 'Donjons' },
-  { to: '/admin/ressources', label: 'Ressources' },
-  { to: '/admin/panoplies', label: 'Panoplies' },
-  { to: '/admin/recettes', label: 'Recettes' },
-];
+import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 
 const gameLinks = [
-  { to: '/game/players', label: 'Joueurs' },
-  { to: '/game/characters', label: 'Personnages' },
-  { to: '/game/groups', label: 'Groupes' },
-  { to: '/game/map', label: 'Exploration' },
+  { to: '/game', label: 'Joueurs', end: true },
+  { to: '/game/dashboard', label: 'Dashboard' },
+  { to: '/game/adventure', label: 'Aventure' },
   { to: '/game/combat', label: 'Combat' },
 ];
 
 const Layout: React.FC = () => {
+  const navigate = useNavigate();
+
   return (
     <div className="app-layout">
       <nav className="sidebar">
         <h2 className="sidebar-title">RPG Tactique</h2>
+        <button className="btn btn-sm btn-secondary sidebar-home-btn" onClick={() => navigate('/')}>
+          Accueil
+        </button>
         <div className="nav-section">
           <h3>Jeu</h3>
           {gameLinks.map(l => (
-            <NavLink key={l.to} to={l.to} className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>
-              {l.label}
-            </NavLink>
-          ))}
-        </div>
-        <div className="nav-section">
-          <h3>Admin</h3>
-          {adminLinks.map(l => (
-            <NavLink key={l.to} to={l.to} className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>
+            <NavLink key={l.to} to={l.to} end={'end' in l}
+              className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>
               {l.label}
             </NavLink>
           ))}

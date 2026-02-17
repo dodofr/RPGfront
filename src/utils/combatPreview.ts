@@ -131,9 +131,8 @@ function getLineOfSightCells(
       y += sy;
       error += dx;
     } else {
-      // Corner case: both adjacent cells are potential blockers
-      cells.push({ x: x + sx, y });
-      cells.push({ x, y: y + sy });
+      // Corner case: line passes exactly through a corner between cells.
+      // Permissive: the diagonal passes freely between the two corner cells.
       x += sx;
       y += sy;
       error += dx - dy;

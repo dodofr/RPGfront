@@ -54,7 +54,8 @@ frontend/src/
 │   │   ├── EquipementsPage.tsx     # + poids, panoplieId, ranges bonusMax
 │   │   ├── SortsPage.tsx           # Charge races + zones pour dropdowns
 │   │   ├── RegionsPage.tsx
-│   │   ├── MapsPage.tsx            # Charge régions pour dropdown
+│   │   ├── MapsPage.tsx            # Charge régions pour dropdown, affiche position monde
+│   │   ├── WorldMapEditor.tsx     # Editeur visuel carte du monde (grille 2D + sidebar)
 │   │   ├── MonstresPage.tsx        # + orMin/orMax, panneau drops
 │   │   ├── GrillesPage.tsx         # Charge maps pour dropdown
 │   │   ├── DonjonsPage.tsx         # Charge régions + maps + monstres
@@ -70,7 +71,7 @@ frontend/src/
 └── styles/
     ├── index.css                   # Theme dark, layout, formulaires, cards
     ├── combat.css                  # Grille combat, panels, barre sorts
-    └── admin.css                   # Editeur grille, relations, inventaire, modal envoi, butin
+    └── admin.css                   # Editeur grille, relations, inventaire, modal envoi, butin, carte du monde
 ```
 
 ## Architecture
@@ -105,8 +106,7 @@ function App() { return <RouterProvider router={router} /> }
 | Admin | `/admin/equipements` | Equipements CRUD |
 | Admin | `/admin/effets` | Effets CRUD |
 | Admin | `/admin/zones` | Zones CRUD |
-| Admin | `/admin/regions` | Régions CRUD |
-| Admin | `/admin/maps` | Maps CRUD |
+| Admin | `/admin/monde` | Monde (onglets: Regions, Maps, Grilles, Donjons, Carte du monde) |
 | Admin | `/admin/monstres` | Monstres CRUD |
 | Admin | `/admin/grilles` | Grilles de combat CRUD |
 | Admin | `/admin/donjons` | Donjons CRUD |
@@ -131,7 +131,7 @@ Chaque module API exporte un objet avec : `getAll()`, `getById()`, `create()`, `
 - `characters.ts` : `charactersApi` — CRUD + spells + stats + inventaire (getInventory, equipItem, unequipItem, destroyItem, destroyResource, sendToCharacter) + craft
 - `groups.ts` : `groupsApi` — CRUD + navigation (move, enter-map, use-connection, move-direction, leave)
 - `combat.ts` : `combatApi` — CRUD + action, move, endTurn, flee
-- `maps.ts` : `regionsApi` (+ monstres) | `mapsApi` (+ connections, spawn, engage, respawn, grilles) | `monstresApi` (+ sorts, drops)
+- `maps.ts` : `regionsApi` (+ monstres) | `mapsApi` (+ connections, spawn, engage, respawn, grilles, updateWorldPositions) | `monstresApi` (+ sorts, drops)
 - `static.ts` : `racesApi` | `sortsApi` (+ effects) | `equipmentApi` (+ lignes) | `effetsApi` | `zonesApi` | `resourcesApi` | `setsApi` (+ bonuses) | `recipesAdminApi` (+ ingredients)
 - `donjons.ts` : `donjonsApi` + `grillesApi`
 
@@ -162,6 +162,10 @@ Toutes suivent le même pattern :
 5. `ConfirmDialog` avant suppression
 
 Les pages complexes (Sorts, Donjons) chargent des données liées pour peupler les dropdowns.
+
+**MondePage** : page à onglets (Regions | Maps | Grilles | Donjons | **Carte du monde**)
+- **WorldMapEditor** : éditeur visuel grille 2D. Sidebar des maps non placées, clic pour sélectionner puis placer sur une case vide. Clic sur map placée pour retirer. Bouton Sauvegarder → `PUT /maps/world-positions` recalcule tous les liens directionnels automatiquement.
+- **MapsPage** : colonne "Pos. monde" dans le tableau. Dropdowns directionnels masqués si la map a une position monde (gérés par l'éditeur).
 
 Pages avec panneau détail (sélection ligne → détail en dessous du tableau) :
 - **EquipementsPage** : Détail arme (stats base + lignes de dégâts), formulaire avec poids/panoplieId/bonusMax ranges

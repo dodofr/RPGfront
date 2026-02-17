@@ -1,57 +1,46 @@
 import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom'
 import Layout from './components/Layout'
+import AdminLayout from './components/AdminLayout'
 
-// Admin pages
-import RacesPage from './pages/admin/RacesPage'
-import SortsPage from './pages/admin/SortsPage'
-import EquipementsPage from './pages/admin/EquipementsPage'
-import EffetsPage from './pages/admin/EffetsPage'
-import ZonesPage from './pages/admin/ZonesPage'
-import RegionsPage from './pages/admin/RegionsPage'
-import MapsPage from './pages/admin/MapsPage'
-import MonstresPage from './pages/admin/MonstresPage'
-import GrillesPage from './pages/admin/GrillesPage'
+// Home
+import HomePage from './pages/HomePage'
+
+// Admin wrapper pages
+import MondePage from './pages/admin/MondePage'
+import EntitesPage from './pages/admin/EntitesPage'
+import CombatAdminPage from './pages/admin/CombatAdminPage'
+import ObjetsPage from './pages/admin/ObjetsPage'
 import GridEditorPage from './pages/admin/GridEditorPage'
-import DonjonsPage from './pages/admin/DonjonsPage'
-import RessourcesPage from './pages/admin/RessourcesPage'
-import PanopliesPage from './pages/admin/PanopliesPage'
-import RecettesPage from './pages/admin/RecettesPage'
 
 // Game pages
 import PlayersPage from './pages/game/PlayersPage'
-import CharactersPage from './pages/game/CharactersPage'
-import GroupsPage from './pages/game/GroupsPage'
+import DashboardPage from './pages/game/DashboardPage'
 import MapPage from './pages/game/MapPage'
 import CombatPage from './pages/game/CombatPage'
 
 const router = createBrowserRouter([
+  { path: '/', element: <HomePage /> },
   {
-    path: '/',
+    path: '/game',
     element: <Layout />,
     children: [
-      { index: true, element: <Navigate to="/game/players" replace /> },
-      // Admin
-      { path: 'admin/races', element: <RacesPage /> },
-      { path: 'admin/sorts', element: <SortsPage /> },
-      { path: 'admin/equipements', element: <EquipementsPage /> },
-      { path: 'admin/effets', element: <EffetsPage /> },
-      { path: 'admin/zones', element: <ZonesPage /> },
-      { path: 'admin/regions', element: <RegionsPage /> },
-      { path: 'admin/maps', element: <MapsPage /> },
-      { path: 'admin/monstres', element: <MonstresPage /> },
-      { path: 'admin/grilles', element: <GrillesPage /> },
-      { path: 'admin/grilles/:id/edit', element: <GridEditorPage /> },
-      { path: 'admin/donjons', element: <DonjonsPage /> },
-      { path: 'admin/ressources', element: <RessourcesPage /> },
-      { path: 'admin/panoplies', element: <PanopliesPage /> },
-      { path: 'admin/recettes', element: <RecettesPage /> },
-      // Game
-      { path: 'game/players', element: <PlayersPage /> },
-      { path: 'game/characters', element: <CharactersPage /> },
-      { path: 'game/groups', element: <GroupsPage /> },
-      { path: 'game/map', element: <MapPage /> },
-      { path: 'game/combat', element: <CombatPage /> },
-      { path: 'game/combat/:id', element: <CombatPage /> },
+      { index: true, element: <PlayersPage /> },
+      { path: 'dashboard', element: <DashboardPage /> },
+      { path: 'adventure', element: <MapPage /> },
+      { path: 'combat', element: <CombatPage /> },
+      { path: 'combat/:id', element: <CombatPage /> },
+    ],
+  },
+  {
+    path: '/admin',
+    element: <AdminLayout />,
+    children: [
+      { index: true, element: <Navigate to="/admin/monde" replace /> },
+      { path: 'monde', element: <MondePage /> },
+      { path: 'entites', element: <EntitesPage /> },
+      { path: 'combat', element: <CombatAdminPage /> },
+      { path: 'objets', element: <ObjetsPage /> },
+      { path: 'grilles/:id/edit', element: <GridEditorPage /> },
     ],
   },
 ])

@@ -189,6 +189,8 @@ export interface GameMap {
   sudMapId: number | null;
   estMapId: number | null;
   ouestMapId: number | null;
+  worldX: number | null;
+  worldY: number | null;
   groupesEnnemis?: GroupeEnnemi[];
   connectionsFrom?: MapConnection[];
   grilles?: { id: number; nom: string; largeur: number; hauteur: number; _count: { cases: number; spawns: number } }[];
@@ -203,6 +205,8 @@ export interface MapConnection {
   positionX: number;
   positionY: number;
   nom: string;
+  donjonId?: number | null;
+  donjon?: { id: number; nom: string; description: string | null; niveauMin: number; niveauMax: number } | null;
 }
 
 export interface MonsterTemplate {
@@ -374,6 +378,7 @@ export interface CombatState {
   status: CombatStatus;
   tourActuel: number;
   entiteActuelle: number;
+  groupeId: number | null;
   grille: { largeur: number; hauteur: number };
   entites: CombatEntity[];
   cases: CombatCase[];

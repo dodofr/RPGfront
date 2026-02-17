@@ -91,7 +91,18 @@ const DonjonsPage: React.FC = () => {
     },
   ];
 
-  const fields = editing ? baseFields : [...baseFields, ...salleFields];
+  const fields = [...baseFields, ...salleFields];
+
+  // Build initial values: for editing, map salles to salle1MapId..salle4MapId
+  const initialValues = editing
+    ? {
+        ...editing,
+        salle1MapId: editing.salles?.find(s => s.ordre === 1)?.mapId,
+        salle2MapId: editing.salles?.find(s => s.ordre === 2)?.mapId,
+        salle3MapId: editing.salles?.find(s => s.ordre === 3)?.mapId,
+        salle4MapId: editing.salles?.find(s => s.ordre === 4)?.mapId,
+      }
+    : undefined;
 
   return (
     <div className="admin-page">
@@ -112,18 +123,18 @@ const DonjonsPage: React.FC = () => {
         open={showForm}
         title={editing ? 'Modifier un donjon' : 'Creer un donjon'}
         fields={fields}
-        initialValues={editing || undefined}
+        initialValues={initialValues}
         onSubmit={async (vals) => {
+          const { salle1MapId, salle2MapId, salle3MapId, salle4MapId, ...donjonData } = vals as Record<string, unknown>;
+          const salles = [
+            { ordre: 1, mapId: Number(salle1MapId) },
+            { ordre: 2, mapId: Number(salle2MapId) },
+            { ordre: 3, mapId: Number(salle3MapId) },
+            { ordre: 4, mapId: Number(salle4MapId) },
+          ];
           if (editing) {
-            await update(editing.id, vals);
+            await update(editing.id, { ...donjonData, salles } as any);
           } else {
-            const { salle1MapId, salle2MapId, salle3MapId, salle4MapId, ...donjonData } = vals as Record<string, unknown>;
-            const salles = [
-              { ordre: 1, mapId: Number(salle1MapId) },
-              { ordre: 2, mapId: Number(salle2MapId) },
-              { ordre: 3, mapId: Number(salle3MapId) },
-              { ordre: 4, mapId: Number(salle4MapId) },
-            ];
             await create({ ...donjonData, salles } as Partial<Donjon> & { salles: { ordre: number; mapId: number }[] });
           }
           setShowForm(false);

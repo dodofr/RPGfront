@@ -25,7 +25,11 @@ const SLOTS: { key: SlotType; label: string }[] = [
 
 const STAT_KEYS = ['force', 'intelligence', 'dexterite', 'agilite', 'vie', 'chance'] as const;
 
-const CharactersPage: React.FC = () => {
+interface CharactersPageProps {
+  playerId?: number;
+}
+
+const CharactersPage: React.FC<CharactersPageProps> = ({ playerId }) => {
   const [characters, setCharacters] = useState<Character[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
   const [races, setRaces] = useState<Race[]>([]);
@@ -46,7 +50,7 @@ const CharactersPage: React.FC = () => {
   const refresh = async () => {
     setLoading(true);
     const [chars, pls, rcs, eqs] = await Promise.all([
-      charactersApi.getAll(),
+      playerId ? playersApi.getCharacters(playerId) : charactersApi.getAll(),
       playersApi.getAll(),
       racesApi.getAll(),
       equipmentApi.getAll(),
@@ -58,7 +62,7 @@ const CharactersPage: React.FC = () => {
     setLoading(false);
   };
 
-  useEffect(() => { refresh(); }, []);
+  useEffect(() => { refresh(); }, [playerId]);
 
   const selectChar = async (id: number) => {
     const [c, s, inv] = await Promise.all([
@@ -123,7 +127,8 @@ const CharactersPage: React.FC = () => {
   const createFields: FieldDef[] = [
     { name: 'nom', label: 'Nom', type: 'text', required: true },
     { name: 'joueurId', label: 'Joueur', type: 'select', required: true,
-      options: players.map(p => ({ value: p.id, label: p.nom })) },
+      options: players.map(p => ({ value: p.id, label: p.nom })),
+      ...(playerId ? { defaultValue: playerId } : {}) },
     { name: 'raceId', label: 'Race', type: 'select', required: true,
       options: races.map(r => ({ value: r.id, label: r.nom })) },
   ];

@@ -36,7 +36,11 @@ const RecettesPage: React.FC = () => {
     { key: 'equipement', header: 'Resultat', render: (item) => item.equipement?.nom ?? `#${item.equipementId}` },
     { key: 'niveauMinimum', header: 'Niveau min' },
     { key: 'coutOr', header: 'Or' },
-    { key: 'ingredients', header: 'Ingredients', render: (item) => String(item.ingredients?.length ?? 0) },
+    { key: 'ingredients', header: 'Ingredients', render: (item) =>
+      item.ingredients && item.ingredients.length > 0
+        ? item.ingredients.map(ing => `${ing.quantite}x ${ing.ressource?.nom ?? `#${ing.ressourceId}`}`).join(', ')
+        : 'Aucun'
+    },
   ];
 
   const fields: FieldDef[] = [

@@ -52,6 +52,13 @@ const MapsPage: React.FC = () => {
     { key: 'hauteur', header: 'Hauteur' },
     { key: 'tauxRencontre', header: 'Taux rencontre' },
     {
+      key: 'worldX',
+      header: 'Pos. monde',
+      render: (item) => item.worldX !== null && item.worldY !== null
+        ? `(${item.worldX}, ${item.worldY})`
+        : <span style={{ color: 'var(--text-muted)' }}>—</span>,
+    },
+    {
       key: 'grilles',
       header: 'Grilles',
       render: (item) => {
@@ -106,10 +113,12 @@ const MapsPage: React.FC = () => {
     { name: 'largeur', label: 'Largeur', type: 'number', required: true, min: 5, defaultValue: 20 },
     { name: 'hauteur', label: 'Hauteur', type: 'number', required: true, min: 5, defaultValue: 20 },
     { name: 'tauxRencontre', label: 'Taux rencontre', type: 'float', defaultValue: 0.2, step: 0.01 },
-    { name: 'nordMapId', label: 'Map Nord', type: 'select', options: allMapsOptions },
-    { name: 'sudMapId', label: 'Map Sud', type: 'select', options: allMapsOptions },
-    { name: 'estMapId', label: 'Map Est', type: 'select', options: allMapsOptions },
-    { name: 'ouestMapId', label: 'Map Ouest', type: 'select', options: allMapsOptions },
+    ...(!editing?.worldX && !editing?.worldY ? [
+      { name: 'nordMapId', label: 'Map Nord', type: 'select' as const, options: allMapsOptions },
+      { name: 'sudMapId', label: 'Map Sud', type: 'select' as const, options: allMapsOptions },
+      { name: 'estMapId', label: 'Map Est', type: 'select' as const, options: allMapsOptions },
+      { name: 'ouestMapId', label: 'Map Ouest', type: 'select' as const, options: allMapsOptions },
+    ] : []),
   ];
 
   const handleDeleteGrille = async (grilleId: number) => {

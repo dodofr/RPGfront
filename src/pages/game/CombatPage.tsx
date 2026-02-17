@@ -436,7 +436,7 @@ const CombatPage: React.FC = () => {
             );
           })()}
 
-          <button className="btn btn-primary" onClick={() => navigate('/game/combat')}>Retour</button>
+          <button className="btn btn-primary" onClick={() => navigate(`/game/adventure${combat.groupeId ? `?groupId=${combat.groupeId}` : ''}`)}>Retour a l'aventure</button>
         </div>
       )}
 
