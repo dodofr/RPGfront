@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { groupsApi } from '../../api/groups';
 import { mapsApi } from '../../api/maps';
-import type { Group, GameMap, Direction, MapConnection } from '../../types';
+import type { Group, GameMap, Direction, MapConnection, GroupeEnnemi } from '../../types';
 import '../../styles/index.css';
 
 const CELL_SIZE = 40;
@@ -94,6 +94,9 @@ const MapPage: React.FC = () => {
     connection: MapConnection;
   } | null>(null);
   const [selectedDifficulty, setSelectedDifficulty] = useState<number>(4);
+
+  // Enemy group modal state (click on enemy cell → confirm before engaging)
+  const [enemyModal, setEnemyModal] = useState<{ group: GroupeEnnemi } | null>(null);
 
   const loadGroup = useCallback(async (gId: number) => {
     const g = await groupsApi.getById(gId);
@@ -431,7 +434,7 @@ const MapPage: React.FC = () => {
                     className={className}
                     onClick={() => {
                       if (cellType === 'enemy' && enemy) {
-                        handleEngage(enemy.id);
+                        setEnemyModal({ group: enemy });
                       } else {
                         handleCellClick(x, y);
                       }
@@ -471,7 +474,34 @@ const MapPage: React.FC = () => {
 
       {/* Sidebar */}
       <div className="adventure-sidebar">
-        <h3>Informations</h3>
+        {/* Group members */}
+        {group.personnages && group.personnages.length > 0 && (
+          <>
+            <h3>Groupe — {group.nom}</h3>
+            <div className="adventure-group-members">
+              {group.personnages.map(({ personnage: p }) => (
+                <button
+                  key={p.id}
+                  className="adventure-member-card"
+                  onClick={() => navigate(
+                    `/game/characters?playerId=${group.joueurId}&groupId=${groupIdParam}&charId=${p.id}`
+                  )}
+                  title={`Voir la fiche de ${p.nom}`}
+                >
+                  <div className="adventure-member-portrait">
+                    {p.nom.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="adventure-member-info">
+                    <div className="adventure-member-name">{p.nom}</div>
+                    <div className="adventure-member-meta">Niv. {p.niveau} · {p.race?.nom}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+
+        <h3 style={{ marginTop: group.personnages?.length ? 16 : 0 }}>Informations</h3>
         <div className="adventure-info">
           <div><strong>Map :</strong> {mapData.nom}</div>
           <div><strong>Type :</strong> {mapData.type}</div>
@@ -528,7 +558,7 @@ const MapPage: React.FC = () => {
                     {ge.membres?.map(m => `${m.monstre?.nom} x${m.quantite} Niv.${m.niveau}`).join(', ')}
                   </div>
                   <button className="btn btn-sm btn-danger" style={{ marginTop: 4 }}
-                    onClick={() => handleEngage(ge.id)}>Engager</button>
+                    onClick={() => setEnemyModal({ group: ge })}>Engager</button>
                 </div>
               ))}
             </div>
@@ -605,6 +635,34 @@ const MapPage: React.FC = () => {
                   })
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Enemy group modal */}
+      {enemyModal && (
+        <div className="modal-overlay" onClick={() => setEnemyModal(null)}>
+          <div className="worldmap-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 380 }}>
+            <div className="worldmap-header">
+              <h2>Groupe ennemi</h2>
+              <button className="btn btn-secondary" onClick={() => setEnemyModal(null)}>×</button>
+            </div>
+            <div style={{ padding: 20 }}>
+              {enemyModal.group.membres?.map(m => (
+                <div key={m.id} style={{ marginBottom: 8 }}>
+                  <strong>{m.monstre?.nom ?? `Monstre ${m.monstreId}`}</strong>
+                  {' '}×{m.quantite}
+                  <span className="meta"> Niv. {m.niveau}</span>
+                </div>
+              ))}
+              <button
+                className="btn btn-danger"
+                style={{ marginTop: 16, width: '100%' }}
+                onClick={() => { setEnemyModal(null); handleEngage(enemyModal.group.id); }}
+              >
+                Attaquer
+              </button>
             </div>
           </div>
         </div>

@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { charactersApi } from '../../api/characters';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { charactersApi, recipesApi } from '../../api/characters';
 import { playersApi } from '../../api/players';
+import { groupsApi } from '../../api/groups';
 import { racesApi, equipmentApi } from '../../api/static';
-import type { Character, Player, Race, Sort, Equipment, SlotType, InventoryState } from '../../types';
+import type { Character, Player, Race, Sort, Equipment, SlotType, InventoryState, Recette, MapType } from '../../types';
 import FormModal, { type FieldDef } from '../../components/FormModal';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import '../../styles/admin.css';
@@ -29,7 +31,17 @@ interface CharactersPageProps {
   playerId?: number;
 }
 
-const CharactersPage: React.FC<CharactersPageProps> = ({ playerId }) => {
+const CharactersPage: React.FC<CharactersPageProps> = ({ playerId: playerIdProp }) => {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+
+  // Support standalone route: playerId can come from prop (DashboardPage) or URL param
+  const playerIdParam = searchParams.get('playerId');
+  const playerId = playerIdProp ?? (playerIdParam ? Number(playerIdParam) : undefined);
+
+  // When arriving from adventure, these params are set
+  const groupId = searchParams.get('groupId');
+  const charIdParam = searchParams.get('charId');
   const [characters, setCharacters] = useState<Character[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
   const [races, setRaces] = useState<Race[]>([]);
@@ -46,6 +58,10 @@ const CharactersPage: React.FC<CharactersPageProps> = ({ playerId }) => {
   const [sendItems, setSendItems] = useState<number[]>([]);
   const [sendResources, setSendResources] = useState<Record<number, number>>({});
   const [sendError, setSendError] = useState<string | null>(null);
+  const [recipes, setRecipes] = useState<Recette[]>([]);
+  const [mapType, setMapType] = useState<MapType | null>(null);
+  const [craftingId, setCraftingId] = useState<number | null>(null);
+  const [craftMessage, setCraftMessage] = useState<string | null>(null);
 
   const refresh = async () => {
     setLoading(true);
@@ -63,6 +79,64 @@ const CharactersPage: React.FC<CharactersPageProps> = ({ playerId }) => {
   };
 
   useEffect(() => { refresh(); }, [playerId]);
+
+  // Auto-select character from URL param (when coming from adventure)
+  useEffect(() => {
+    if (charIdParam && !loading) {
+      selectChar(Number(charIdParam));
+    }
+  }, [charIdParam, loading]);
+
+  // Fetch group map type for context display
+  useEffect(() => {
+    if (!groupId) { setMapType(null); return; }
+    groupsApi.getById(Number(groupId)).then(g => {
+      setMapType(g.map?.type ?? null);
+    }).catch(() => setMapType(null));
+  }, [groupId]);
+
+  // Always load recipes (craft accessible depuis la fiche, hors aventure aussi)
+  useEffect(() => {
+    recipesApi.getAll().then(setRecipes).catch(() => setRecipes([]));
+  }, []);
+
+  // Craft always available from character sheet; in adventure it's restricted to VILLE/SAFE
+  const canCraftInTown = !groupId || mapType === 'VILLE' || mapType === 'SAFE';
+
+  const handleCraft = async (recetteId: number) => {
+    if (!selected) return;
+    setCraftingId(recetteId);
+    setCraftMessage(null);
+    try {
+      await charactersApi.craft(selected.id, recetteId);
+      setCraftMessage('Craft reussi !');
+      await selectChar(selected.id);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Erreur lors du craft';
+      setCraftMessage(msg);
+    } finally {
+      setCraftingId(null);
+    }
+  };
+
+  const checkRecipeCanCraft = (recipe: Recette): boolean => {
+    if (!selected || !inventory) return false;
+    if (selected.niveau < recipe.niveauMinimum) return false;
+    if (inventory.or < recipe.coutOr) return false;
+    // Check ingredients
+    if (recipe.ingredients) {
+      for (const ing of recipe.ingredients) {
+        const owned = inventory.ressources.find(r => r.ressourceId === ing.ressourceId);
+        if (!owned || owned.quantite < ing.quantite) return false;
+      }
+    }
+    // Check weight (approximate: equipment poids)
+    if (recipe.equipement) {
+      const newWeight = inventory.poidsActuel + recipe.equipement.poids;
+      if (newWeight > inventory.poidsMax) return false;
+    }
+    return true;
+  };
 
   const selectChar = async (id: number) => {
     const [c, s, inv] = await Promise.all([
@@ -139,21 +213,17 @@ const CharactersPage: React.FC<CharactersPageProps> = ({ playerId }) => {
     selectChar(selected.id);
   };
 
-  const handleEquip = async (slot: SlotType, equipmentId: number | null) => {
-    if (!selected) return;
-    await charactersApi.equip(selected.id, slot, equipmentId);
-    selectChar(selected.id);
-  };
-
-  const getEquipmentForSlot = (slot: SlotType) =>
-    allEquipment.filter(e => e.slot === slot);
-
-  const getEquippedItem = (slot: SlotType): Equipment | undefined => {
+  // Template data (weapon damage, portée, etc.)
+  const getEquippedTemplate = (slot: SlotType): Equipment | undefined => {
     if (!selected) return undefined;
     const eqId = selected.equipements[slot];
     if (!eqId) return undefined;
     return allEquipment.find(e => e.id === eqId);
   };
+
+  // Rolled instance (bonus stats effectifs depuis l'inventaire)
+  const getEquippedInstance = (slot: SlotType) =>
+    inventory?.items.find(i => i.estEquipe && i.slot === slot);
 
   if (loading) return <div className="loading">Chargement...</div>;
 
@@ -161,7 +231,19 @@ const CharactersPage: React.FC<CharactersPageProps> = ({ playerId }) => {
     <div>
       <div className="page-header">
         <h1>Personnages</h1>
-        <button className="btn btn-primary" onClick={() => setShowCreate(true)}>+ Creer</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {groupId && (
+            <button
+              className="btn btn-secondary"
+              onClick={() => navigate(`/game/adventure?groupId=${groupId}`)}
+            >
+              ← Retour à l'aventure
+            </button>
+          )}
+          {!groupId && (
+            <button className="btn btn-primary" onClick={() => setShowCreate(true)}>+ Creer</button>
+          )}
+        </div>
       </div>
       <div className="card-grid">
         {characters.map(c => (
@@ -287,48 +369,52 @@ const CharactersPage: React.FC<CharactersPageProps> = ({ playerId }) => {
           <h3 className="section-title">Equipement (slots)</h3>
           <div className="equipment-grid">
             {SLOTS.map(({ key: slot, label }) => {
-              const equipped = getEquippedItem(slot);
-              const available = getEquipmentForSlot(slot);
+              const tmpl = getEquippedTemplate(slot);   // template : dégâts, portée
+              const inst = getEquippedInstance(slot);   // instance : stats rollées
+              const itemName = inst?.nom ?? tmpl?.nom;
               return (
                 <div key={slot} className="equip-slot">
                   <div className="slot-label">{label}</div>
-                  {equipped ? (
+                  {itemName ? (
                     <>
-                      <div className="slot-item">{equipped.nom}</div>
+                      <div className="slot-item">{itemName}</div>
+                      {/* Stats rollées de l'instance */}
                       <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
-                        {[
-                          equipped.bonusForce && `FOR +${equipped.bonusForce}`,
-                          equipped.bonusIntelligence && `INT +${equipped.bonusIntelligence}`,
-                          equipped.bonusDexterite && `DEX +${equipped.bonusDexterite}`,
-                          equipped.bonusAgilite && `AGI +${equipped.bonusAgilite}`,
-                          equipped.bonusVie && `VIE +${equipped.bonusVie}`,
-                          equipped.bonusChance && `CHA +${equipped.bonusChance}`,
-                          equipped.bonusPA && `PA +${equipped.bonusPA}`,
-                          equipped.bonusPM && `PM +${equipped.bonusPM}`,
-                          equipped.bonusPO && `PO +${equipped.bonusPO}`,
-                          equipped.bonusCritique && `CRI +${equipped.bonusCritique}%`,
-                        ].filter(Boolean).join(', ') || 'Aucun bonus'}
+                        {inst ? [
+                          inst.bonusForce > 0 && `FOR +${inst.bonusForce}`,
+                          inst.bonusIntelligence > 0 && `INT +${inst.bonusIntelligence}`,
+                          inst.bonusDexterite > 0 && `DEX +${inst.bonusDexterite}`,
+                          inst.bonusAgilite > 0 && `AGI +${inst.bonusAgilite}`,
+                          inst.bonusVie > 0 && `VIE +${inst.bonusVie}`,
+                          inst.bonusChance > 0 && `CHA +${inst.bonusChance}`,
+                          inst.bonusPA > 0 && `PA +${inst.bonusPA}`,
+                          inst.bonusPM > 0 && `PM +${inst.bonusPM}`,
+                          inst.bonusPO > 0 && `PO +${inst.bonusPO}`,
+                          inst.bonusCritique > 0 && `CRI +${inst.bonusCritique}%`,
+                        ].filter(Boolean).join(', ') || 'Aucun bonus stats'
+                        : 'Aucun bonus stats'}
                       </div>
-                      <button className="btn btn-sm btn-danger" onClick={() => handleEquip(slot, null)}>Retirer</button>
+                      {/* Dégâts et caractéristiques d'arme (depuis le template) */}
+                      {tmpl && slot === 'ARME' && (
+                        <div style={{ fontSize: 10, color: 'var(--accent, #90caf9)', marginTop: 2 }}>
+                          {tmpl.degatsMin != null && tmpl.degatsMax != null && (
+                            <span>{tmpl.degatsMin}-{tmpl.degatsMax} dmg</span>
+                          )}
+                          {tmpl.degatsCritMin != null && tmpl.degatsCritMax != null && (
+                            <span style={{ marginLeft: 6 }}>({tmpl.degatsCritMin}-{tmpl.degatsCritMax} crit)</span>
+                          )}
+                          {tmpl.coutPA != null && <span style={{ marginLeft: 6 }}>{tmpl.coutPA} PA</span>}
+                          {tmpl.porteeMin != null && tmpl.porteeMax != null && (
+                            <span style={{ marginLeft: 6 }}>{tmpl.porteeMin}-{tmpl.porteeMax} po</span>
+                          )}
+                          {tmpl.statUtilisee && <span style={{ marginLeft: 6 }}>{tmpl.statUtilisee}</span>}
+                          {tmpl.cooldown != null && tmpl.cooldown > 0 && <span style={{ marginLeft: 6 }}>CD {tmpl.cooldown}</span>}
+                        </div>
+                      )}
+                      <button className="btn btn-sm btn-danger" onClick={() => handleUnequipItem(slot)}>Retirer</button>
                     </>
                   ) : (
-                    <>
-                      <div className="slot-empty">Vide</div>
-                      {available.length > 0 && (
-                        <select
-                          defaultValue=""
-                          onChange={e => {
-                            const eqId = Number(e.target.value);
-                            if (eqId) handleEquip(slot, eqId);
-                          }}
-                        >
-                          <option value="">-- Equiper --</option>
-                          {available.map(eq => (
-                            <option key={eq.id} value={eq.id}>{eq.nom} (Niv. {eq.niveauMinimum})</option>
-                          ))}
-                        </select>
-                      )}
-                    </>
+                    <div className="slot-empty">Vide</div>
                   )}
                 </div>
               );
@@ -442,6 +528,71 @@ const CharactersPage: React.FC<CharactersPageProps> = ({ playerId }) => {
                   </div>
                 </div>
               )}
+            </>
+          )}
+
+          {/* Craft Section — only in VILLE/SAFE */}
+          {canCraftInTown && inventory && recipes.length > 0 && (
+            <>
+              <h3 className="section-title">Craft</h3>
+              {craftMessage && (
+                <div style={{ marginBottom: 8, padding: '6px 10px', borderRadius: 4, fontSize: 13,
+                  background: craftMessage === 'Craft reussi !' ? 'var(--success)' : 'var(--danger)',
+                  color: '#fff' }}>
+                  {craftMessage}
+                </div>
+              )}
+              <div className="sort-list">
+                {recipes.map(recipe => {
+                  const canCraft = checkRecipeCanCraft(recipe);
+                  const levelOk = selected ? selected.niveau >= recipe.niveauMinimum : false;
+                  const orOk = inventory.or >= recipe.coutOr;
+                  return (
+                    <div key={recipe.id} className="sort-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <span className="sort-name">{recipe.nom}</span>
+                          {recipe.equipement && (
+                            <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--text-muted)' }}>
+                              ({recipe.equipement.nom} - {recipe.equipement.slot})
+                            </span>
+                          )}
+                        </div>
+                        <div className="sort-meta">
+                          <span style={{ color: levelOk ? 'var(--success)' : 'var(--danger)' }}>
+                            Niv. {recipe.niveauMinimum}
+                          </span>
+                          <span style={{ color: orOk ? 'var(--success)' : 'var(--danger)' }}>
+                            {recipe.coutOr} or
+                          </span>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                          {recipe.ingredients?.map(ing => {
+                            const owned = inventory.ressources.find(r => r.ressourceId === ing.ressourceId);
+                            const ownedQty = owned?.quantite ?? 0;
+                            const hasEnough = ownedQty >= ing.quantite;
+                            return (
+                              <span key={ing.id} style={{ fontSize: 12, color: hasEnough ? 'var(--success)' : 'var(--danger)' }}>
+                                {ing.quantite}x {ing.ressource?.nom ?? `Res#${ing.ressourceId}`}
+                                {!hasEnough && ` (${ownedQty}/${ing.quantite})`}
+                              </span>
+                            );
+                          })}
+                        </div>
+                        <button
+                          className={`btn btn-sm ${canCraft ? 'btn-primary' : 'btn-secondary'}`}
+                          disabled={!canCraft || craftingId === recipe.id}
+                          onClick={() => handleCraft(recipe.id)}
+                        >
+                          {craftingId === recipe.id ? 'Craft...' : 'Crafter'}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </>
           )}
         </div>

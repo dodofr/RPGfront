@@ -4,7 +4,8 @@ import FormModal, { type FieldDef } from '../../components/FormModal';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { useCrud } from '../../hooks/useCrud';
 import { sortsApi, racesApi, zonesApi, effetsApi } from '../../api/static';
-import type { Sort, Race, Zone, Effet } from '../../types';
+import { monstresApi } from '../../api/maps';
+import type { Sort, Race, Zone, Effet, MonsterTemplate } from '../../types';
 import '../../styles/admin.css';
 
 // Normalize effect from either flat (combat) or nested (API) format
@@ -31,11 +32,13 @@ const SortsPage: React.FC = () => {
   const [addEffetId, setAddEffetId] = useState<number>(0);
   const [addChance, setAddChance] = useState<number>(100);
   const [addSurCible, setAddSurCible] = useState<boolean>(true);
+  const [monstres, setMonstres] = useState<MonsterTemplate[]>([]);
 
   useEffect(() => {
     racesApi.getAll().then(setRaces);
     zonesApi.getAll().then(setZones);
     effetsApi.getAll().then(setAllEffets);
+    monstresApi.getAll().then(setMonstres);
   }, []);
 
   const filteredItems = items.filter(sort => {
@@ -201,8 +204,9 @@ const SortsPage: React.FC = () => {
     },
     {
       name: 'invocationTemplateId',
-      label: 'Template invocation ID',
-      type: 'number',
+      label: 'Template invocation',
+      type: 'select',
+      options: monstres.map(m => ({ value: m.id, label: `${m.nom} (ID ${m.id})` })),
       showIf: (v) => v.estInvocation === true,
     },
   ];

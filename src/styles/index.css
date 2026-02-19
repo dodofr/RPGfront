@@ -516,6 +516,66 @@ body {
   padding: 8px;
 }
 
+/* Group member portraits */
+.adventure-group-members {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.adventure-member-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.adventure-member-card:hover {
+  border-color: var(--primary);
+  background: rgba(25, 118, 210, 0.08);
+}
+
+.adventure-member-portrait {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+
+.adventure-member-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.adventure-member-name {
+  font-weight: 600;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.adventure-member-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 1px;
+}
+
 /* Grid */
 .adventure-grid-container {
   overflow: auto;

@@ -387,6 +387,16 @@ export interface CombatState {
   logs: CombatLogEntry[];
 }
 
+export interface DonjonSalleComposition {
+  id: number;
+  salleId: number;
+  difficulte: number;
+  monstreTemplateId: number;
+  monstre?: MonsterTemplate;
+  niveau: number;
+  quantite: number;
+}
+
 export interface Donjon {
   id: number;
   nom: string;
@@ -398,6 +408,7 @@ export interface Donjon {
   bossId: number;
   boss?: MonsterTemplate;
   salles?: DonjonSalle[];
+  portails?: MapConnection[];
 }
 
 export interface DonjonSalle {
@@ -406,6 +417,7 @@ export interface DonjonSalle {
   ordre: number;
   mapId: number;
   map?: GameMap;
+  compositions?: DonjonSalleComposition[];
 }
 
 export interface GrilleCombat {

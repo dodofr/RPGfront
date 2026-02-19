@@ -17,6 +17,7 @@ import PlayersPage from './pages/game/PlayersPage'
 import DashboardPage from './pages/game/DashboardPage'
 import MapPage from './pages/game/MapPage'
 import CombatPage from './pages/game/CombatPage'
+import CharactersPage from './pages/game/CharactersPage'
 
 const router = createBrowserRouter([
   { path: '/', element: <HomePage /> },
@@ -27,6 +28,7 @@ const router = createBrowserRouter([
       { index: true, element: <PlayersPage /> },
       { path: 'dashboard', element: <DashboardPage /> },
       { path: 'adventure', element: <MapPage /> },
+      { path: 'characters', element: <CharactersPage /> },
       { path: 'combat', element: <CombatPage /> },
       { path: 'combat/:id', element: <CombatPage /> },
     ],

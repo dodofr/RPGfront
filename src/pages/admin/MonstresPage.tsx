@@ -3,9 +3,9 @@ import DataTable, { type Column } from '../../components/DataTable';
 import FormModal, { type FieldDef } from '../../components/FormModal';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { useCrud } from '../../hooks/useCrud';
-import { monstresApi } from '../../api/maps';
+import { monstresApi, regionsApi } from '../../api/maps';
 import { sortsApi, equipmentApi, resourcesApi } from '../../api/static';
-import type { MonsterTemplate, Sort, Equipment, Ressource } from '../../types';
+import type { MonsterTemplate, Sort, Equipment, Ressource, Region } from '../../types';
 import '../../styles/admin.css';
 
 type MonsterTab = 'ennemis' | 'invocations';
@@ -27,12 +27,16 @@ const MonstresPage: React.FC = () => {
   const [dropRate, setDropRate] = useState<number>(0.3);
   const [dropMin, setDropMin] = useState<number>(1);
   const [dropMax, setDropMax] = useState<number>(1);
+  const [allRegions, setAllRegions] = useState<Region[]>([]);
+  const [addRegionId, setAddRegionId] = useState<number>(0);
+  const [addRegionProba, setAddRegionProba] = useState<number>(0.5);
 
   useEffect(() => {
-    Promise.all([sortsApi.getAll(), equipmentApi.getAll(), resourcesApi.getAll()]).then(([s, e, r]) => {
+    Promise.all([sortsApi.getAll(), equipmentApi.getAll(), resourcesApi.getAll(), regionsApi.getAll()]).then(([s, e, r, reg]) => {
       setAllSorts(s);
       setAllEquipment(e);
       setAllResources(r);
+      setAllRegions(reg);
     });
   }, []);
 
@@ -81,6 +85,19 @@ const MonstresPage: React.FC = () => {
     await monstresApi.removeDrop(selectedMonster.id, dropId);
     await selectMonster(selectedMonster.id);
     refresh();
+  };
+
+  const handleAddRegion = async () => {
+    if (!selectedMonster || !addRegionId) return;
+    await regionsApi.addMonstre(addRegionId, { monstreId: selectedMonster.id, probabilite: addRegionProba });
+    await selectMonster(selectedMonster.id);
+    setAddRegionId(0);
+  };
+
+  const handleRemoveRegion = async (regionId: number) => {
+    if (!selectedMonster) return;
+    await regionsApi.removeMonstre(regionId, selectedMonster.id);
+    await selectMonster(selectedMonster.id);
   };
 
   const columns: Column<MonsterTemplate>[] = [
@@ -290,18 +307,45 @@ const MonstresPage: React.FC = () => {
               </div>
             </div>
 
-            {selectedMonster.regions && selectedMonster.regions.length > 0 && (
-              <div className="detail-section">
-                <h4>Regions</h4>
-                <div className="sort-list">
-                  {selectedMonster.regions.map((r, i) => (
+            <div className="detail-section">
+              <h4>Regions ({selectedMonster.regions?.length || 0})</h4>
+              <div className="sort-list">
+                {selectedMonster.regions && selectedMonster.regions.length > 0 ? (
+                  selectedMonster.regions.map((r, i) => (
                     <div key={i} className="sort-item">
-                      <span>{r.region.nom}</span>
+                      <div>
+                        <span className="sort-name">{r.region?.nom || `Region #${r.regionId}`}</span>
+                        <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--text-muted)' }}>
+                          Probabilite: {Math.round(r.probabilite * 100)}%
+                        </span>
+                      </div>
+                      <button className="btn btn-sm btn-danger" onClick={() => handleRemoveRegion(r.regionId)}>X</button>
                     </div>
-                  ))}
-                </div>
+                  ))
+                ) : (
+                  <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Aucune region</div>
+                )}
               </div>
-            )}
+              <div className="inline-add">
+                <select value={addRegionId} onChange={e => setAddRegionId(Number(e.target.value))}>
+                  <option value={0}>-- Region --</option>
+                  {allRegions.map(r => (
+                    <option key={r.id} value={r.id}>{r.nom} (Niv {r.niveauMin}-{r.niveauMax})</option>
+                  ))}
+                </select>
+                <input
+                  type="number"
+                  value={addRegionProba}
+                  onChange={e => setAddRegionProba(Number(e.target.value))}
+                  step={0.05}
+                  min={0}
+                  max={1}
+                  style={{ width: 60 }}
+                  title="Probabilite"
+                />
+                <button className="btn btn-sm btn-success" onClick={handleAddRegion} disabled={!addRegionId}>+ Ajouter</button>
+              </div>
+            </div>
           </div>
         </div>
       )}
