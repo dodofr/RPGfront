@@ -2,7 +2,7 @@
 export type StatType = 'FORCE' | 'INTELLIGENCE' | 'DEXTERITE' | 'AGILITE' | 'VIE' | 'CHANCE' | 'PA' | 'PM' | 'PO' | 'CRITIQUE';
 export type SortType = 'ARME' | 'SORT';
 export type SlotType = 'ARME' | 'COIFFE' | 'AMULETTE' | 'BOUCLIER' | 'HAUT' | 'BAS' | 'ANNEAU1' | 'ANNEAU2' | 'FAMILIER';
-export type EffetType = 'BUFF' | 'DEBUFF' | 'DISPEL' | 'POUSSEE' | 'ATTIRANCE' | 'POISON';
+export type EffetType = 'BUFF' | 'DEBUFF' | 'DISPEL' | 'POUSSEE' | 'ATTIRANCE' | 'POISON' | 'BOUCLIER';
 export type ZoneType = 'CASE' | 'CROIX' | 'LIGNE' | 'CONE' | 'CERCLE' | 'LIGNE_PERPENDICULAIRE' | 'DIAGONALE' | 'CARRE' | 'ANNEAU' | 'CONE_INVERSE';
 export type CombatStatus = 'EN_COURS' | 'TERMINE' | 'ABANDONNE';
 export type RegionType = 'FORET' | 'PLAINE' | 'DESERT' | 'MONTAGNE' | 'MARAIS' | 'CAVERNE' | 'CITE';
@@ -64,6 +64,10 @@ export interface Sort {
   race?: Race | null;
   estInvocation: boolean;
   estVolDeVie: boolean;
+  estGlyphe?: boolean;
+  estPiege?: boolean;
+  poseDuree?: number | null;
+  porteeModifiable?: boolean;
   invocationTemplateId: number | null;
   effets?: {
     effetId: number;
@@ -116,8 +120,6 @@ export interface Equipment {
   bonusCritiqueMax: number | null;
   degatsMin: number | null;
   degatsMax: number | null;
-  degatsCritMin: number | null;
-  degatsCritMax: number | null;
   chanceCritBase: number | null;
   coutPA: number | null;
   porteeMin: number | null;
@@ -152,6 +154,7 @@ export interface Effet {
   valeur: number;
   valeurMin?: number | null;
   duree: number;
+  cumulable?: boolean;
 }
 
 export interface SortEffet {
@@ -373,6 +376,20 @@ export interface CombatLogEntry {
   type: CombatLogType;
 }
 
+export interface ZonePoseeState {
+  id: number;
+  x: number;
+  y: number;
+  poseurId: number;
+  poseurEquipe: number;
+  estPiege: boolean;
+  toursRestants: number;
+  degatsMinFinal: number;
+  degatsMaxFinal: number;
+  statUtilisee: string;
+  effetId?: number | null;
+}
+
 export interface CombatState {
   id: number;
   status: CombatStatus;
@@ -385,6 +402,7 @@ export interface CombatState {
   effetsActifs: EffetActif[];
   cooldowns: { entiteId: number; sortId: number; toursRestants: number }[];
   logs: CombatLogEntry[];
+  zonesActives?: ZonePoseeState[];
 }
 
 export interface DonjonSalleComposition {

@@ -20,8 +20,13 @@ const EffetsPage: React.FC = () => {
       key: 'type',
       header: 'Type',
       render: (item) => {
-        const cls = item.type === 'DISPEL' ? 'badge-dispel' : item.type === 'BUFF' ? 'badge-success' : item.type === 'POISON' ? 'badge-poison' : (item.type === 'POUSSEE' || item.type === 'ATTIRANCE') ? 'badge-movement' : 'badge-danger';
-        return <span className={`badge ${cls}`}>{item.type}</span>;
+        const cls = item.type === 'DISPEL' ? 'badge-dispel' : item.type === 'BUFF' ? 'badge-success' : item.type === 'POISON' ? 'badge-poison' : (item.type === 'POUSSEE' || item.type === 'ATTIRANCE') ? 'badge-movement' : item.type === 'BOUCLIER' ? 'badge-info' : 'badge-danger';
+        return (
+          <>
+            <span className={`badge ${cls}`}>{item.type}</span>
+            {item.cumulable && <span className="badge badge-secondary" style={{ marginLeft: 4 }}>Cumulable</span>}
+          </>
+        );
       },
     },
     { key: 'statCiblee', header: 'Stat ciblee' },
@@ -47,6 +52,7 @@ const EffetsPage: React.FC = () => {
         { value: 'POUSSEE', label: 'Poussee' },
         { value: 'ATTIRANCE', label: 'Attirance' },
         { value: 'POISON', label: 'Poison' },
+        { value: 'BOUCLIER', label: 'Bouclier' },
       ],
     },
     {
@@ -70,6 +76,7 @@ const EffetsPage: React.FC = () => {
     { name: 'valeurMin', label: 'Valeur min (poison)', type: 'number', required: false },
     { name: 'valeur', label: 'Valeur (max)', type: 'number', required: true },
     { name: 'duree', label: 'Duree (tours)', type: 'number', required: true, min: 0, defaultValue: 1 },
+    { name: 'cumulable', label: 'Cumulable (plusieurs instances peuvent coexister)', type: 'checkbox', defaultValue: false },
   ];
 
   return (

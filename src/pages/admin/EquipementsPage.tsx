@@ -105,34 +105,6 @@ const EquipementsPage: React.FC = () => {
     { name: 'bonusCritiqueMax', label: 'Bonus Critique % (max)', type: 'number' },
     // Weapon-specific fields (shown only when slot is ARME)
     {
-      name: 'degatsMin',
-      label: 'Degats min (base)',
-      type: 'number',
-      defaultValue: 0,
-      showIf: (v) => v.slot === 'ARME',
-    },
-    {
-      name: 'degatsMax',
-      label: 'Degats max (base)',
-      type: 'number',
-      defaultValue: 0,
-      showIf: (v) => v.slot === 'ARME',
-    },
-    {
-      name: 'degatsCritMin',
-      label: 'Degats crit min (base)',
-      type: 'number',
-      defaultValue: 0,
-      showIf: (v) => v.slot === 'ARME',
-    },
-    {
-      name: 'degatsCritMax',
-      label: 'Degats crit max (base)',
-      type: 'number',
-      defaultValue: 0,
-      showIf: (v) => v.slot === 'ARME',
-    },
-    {
       name: 'chanceCritBase',
       label: 'Chance crit base',
       type: 'float',
@@ -183,13 +155,6 @@ const EquipementsPage: React.FC = () => {
       showIf: (v) => v.slot === 'ARME',
     },
     {
-      name: 'statUtilisee',
-      label: 'Stat utilisee (base)',
-      type: 'select',
-      options: STAT_OPTIONS,
-      showIf: (v) => v.slot === 'ARME',
-    },
-    {
       name: 'cooldown',
       label: 'Cooldown',
       type: 'number',
@@ -202,13 +167,6 @@ const EquipementsPage: React.FC = () => {
       type: 'float',
       defaultValue: 0,
       step: 0.01,
-      showIf: (v) => v.slot === 'ARME',
-    },
-    {
-      name: 'estVolDeVie',
-      label: 'Vol de vie (global)',
-      type: 'checkbox',
-      defaultValue: false,
       showIf: (v) => v.slot === 'ARME',
     },
   ];
@@ -253,16 +211,8 @@ const EquipementsPage: React.FC = () => {
           <h3>{selected.nom} <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>Niv. {selected.niveauMinimum}</span></h3>
           <div className="detail-sections">
             <div className="detail-section">
-              <h4>Attaque de base</h4>
+              <h4>Attaque</h4>
               <div className="stat-grid">
-                <div className="stat-row">
-                  <span className="stat-label">Degats</span>
-                  <span className="stat-value">{selected.degatsMin}-{selected.degatsMax}</span>
-                </div>
-                <div className="stat-row">
-                  <span className="stat-label">Crit</span>
-                  <span className="stat-value">{selected.degatsCritMin}-{selected.degatsCritMax}</span>
-                </div>
                 <div className="stat-row">
                   <span className="stat-label">% Crit</span>
                   <span className="stat-value">{Math.round((selected.chanceCritBase ?? 0) * 100)}%</span>
@@ -270,10 +220,6 @@ const EquipementsPage: React.FC = () => {
                 <div className="stat-row">
                   <span className="stat-label">Bonus crit</span>
                   <span className="stat-value">+{selected.bonusCrit ?? 0}</span>
-                </div>
-                <div className="stat-row">
-                  <span className="stat-label">Stat</span>
-                  <span className="stat-value">{selected.statUtilisee}</span>
                 </div>
                 <div className="stat-row">
                   <span className="stat-label">PA</span>
@@ -287,12 +233,6 @@ const EquipementsPage: React.FC = () => {
                   <div className="stat-row">
                     <span className="stat-label">Echec</span>
                     <span className="stat-value" style={{ color: 'var(--danger)' }}>{Math.round(selected.tauxEchec * 100)}%</span>
-                  </div>
-                )}
-                {selected.estVolDeVie && (
-                  <div className="stat-row">
-                    <span className="stat-label">Vol de vie</span>
-                    <span className="stat-value" style={{ color: '#00c853' }}>Oui</span>
                   </div>
                 )}
               </div>
@@ -317,8 +257,8 @@ const EquipementsPage: React.FC = () => {
                   ))}
                 </div>
               ) : (
-                <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 8 }}>
-                  Aucune ligne — utilise l'attaque de base
+                <div style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 8 }}>
+                  Aucune ligne — arme inutilisable en combat
                 </div>
               )}
 

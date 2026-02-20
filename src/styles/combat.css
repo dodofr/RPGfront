@@ -714,3 +714,42 @@
 .log-entry.log-turn { color: var(--warning); border-top: 1px solid rgba(255,255,255,0.1); padding-top: 4px; margin-top: 2px; }
 .log-entry.log-effect { color: #ce93d8; }
 .log-entry.log-effect-expire { color: var(--text-muted); font-style: italic; }
+
+/* ======= Zones posées (glyphes et pièges) ======= */
+
+.zone-glyphe {
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 140, 0, 0.35);
+  border: 2px solid rgba(255, 140, 0, 0.8);
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: #ff8c00;
+  font-weight: bold;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.zone-piege {
+  position: absolute;
+  inset: 0;
+  background: rgba(180, 0, 200, 0.30);
+  border: 2px dashed rgba(180, 0, 200, 0.8);
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: #b400c8;
+  font-weight: bold;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.bouclier-badge {
+  font-size: 10px;
+  color: #4a90d9;
+}

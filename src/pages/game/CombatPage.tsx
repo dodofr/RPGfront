@@ -175,6 +175,9 @@ const CombatPage: React.FC = () => {
   const entityMap = new Map<string, CombatEntity>();
   combat.entites.filter(e => e.pvActuels > 0).forEach(e => entityMap.set(`${e.position.x},${e.position.y}`, e));
 
+  // Equipe du joueur (toujours 0)
+  const monEquipe = 0;
+
   // ArmeData helper
   const armeData = currentEntity?.armeData ? currentEntity.armeData as unknown as ArmeData : null;
   const armeZone = armeData?.zoneId ? zones.find(z => z.id === armeData.zoneId) ?? null : null;
@@ -626,7 +629,10 @@ const CombatPage: React.FC = () => {
                     )}
                     <div className="spell-info-row">
                       <span className="label">Portee</span>
-                      <span>{spellInfoData.porteeMin}-{spellInfoData.porteeMax}</span>
+                      <span>
+                        {spellInfoData.porteeMin}-{spellInfoData.porteeMax}
+                        {selectedSort?.porteeModifiable === false && <span style={{ color: 'var(--text-muted)', fontSize: 11, marginLeft: 4 }}>(PO fixe)</span>}
+                      </span>
                     </div>
                     {spellInfoData.zone && (
                       <div className="spell-info-row">
@@ -641,12 +647,14 @@ const CombatPage: React.FC = () => {
                       </div>
                     )}
                   </div>
-                  {(spellInfoData.estSoin || spellInfoData.estDispel || spellInfoData.estInvocation || spellInfoData.estVolDeVie) && (
+                  {(spellInfoData.estSoin || spellInfoData.estDispel || spellInfoData.estInvocation || spellInfoData.estVolDeVie || selectedSort?.estGlyphe || selectedSort?.estPiege) && (
                     <div className="spell-info-badges">
                       {spellInfoData.estSoin && <span className="spell-badge heal">Soin</span>}
                       {spellInfoData.estDispel && <span className="spell-badge dispel">Dispel</span>}
                       {spellInfoData.estInvocation && <span className="spell-badge invocation">Invocation</span>}
                       {spellInfoData.estVolDeVie && <span className="spell-badge lifesteal">Vol de vie</span>}
+                      {selectedSort?.estGlyphe && <span className="spell-badge" style={{ background: 'rgba(255,140,0,0.2)', color: '#ff8c00' }}>Glyphe ({selectedSort.poseDuree ?? '?'}t)</span>}
+                      {selectedSort?.estPiege && <span className="spell-badge" style={{ background: 'rgba(180,0,200,0.2)', color: '#b400c8' }}>Piège ({selectedSort.poseDuree ?? '?'}t)</span>}
                     </div>
                   )}
                   {/* Effects section */}
@@ -695,6 +703,10 @@ const CombatPage: React.FC = () => {
                 const inAoe = aoeCells.has(cellKey);
                 const isHovered = hoveredCell?.x === x && hoveredCell?.y === y;
 
+                // Zones posées (glyphes et pièges)
+                const glyphe = combat.zonesActives?.find(z => z.x === x && z.y === y && !z.estPiege);
+                const piege = combat.zonesActives?.find(z => z.x === x && z.y === y && z.estPiege && z.poseurEquipe === monEquipe);
+
                 let cellClass = 'combat-cell';
                 if (obstacle) cellClass += ' obstacle';
                 if (entity && !isDead) {
@@ -734,10 +746,11 @@ const CombatPage: React.FC = () => {
                         </span>
                         <span className="entity-name">{entity.nom}</span>
                         {/* Effect indicators on grid */}
-                        {(entHasBuff || entHasDebuff) && (
+                        {(entHasBuff || entHasDebuff || entityEffects.some(ef => ef.type === 'BOUCLIER')) && (
                           <div className="cell-effects">
                             {entHasBuff && <span className="cell-dot buff-dot" />}
                             {entHasDebuff && <span className="cell-dot debuff-dot" />}
+                            {entityEffects.some(ef => ef.type === 'BOUCLIER') && <span className="bouclier-badge" title="Bouclier actif">🛡</span>}
                           </div>
                         )}
                         {/* PA/PM mini display */}
@@ -750,6 +763,18 @@ const CombatPage: React.FC = () => {
                       </>
                     )}
                     {obstacle && !entity && <span style={{ color: '#555' }}>X</span>}
+                    {/* Glyphe visible sur la case */}
+                    {glyphe && (
+                      <div className="zone-glyphe" title={`Glyphe (${glyphe.toursRestants}t restants)`}>
+                        ⬡
+                      </div>
+                    )}
+                    {/* Piège visible seulement pour l'équipe du poseur */}
+                    {piege && (
+                      <div className="zone-piege" title={`Piège (${piege.toursRestants}t restants)`}>
+                        ⊗
+                      </div>
+                    )}
                     {/* Entity Tooltip - Enhanced with stats and effect details */}
                     {showTooltip && entity && (
                       <div className="entity-tooltip">

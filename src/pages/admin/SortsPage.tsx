@@ -108,6 +108,9 @@ const SortsPage: React.FC = () => {
         if (item.estDispel) flags.push('Dispel');
         if (item.estInvocation) flags.push('Invoc.');
         if (item.estVolDeVie) flags.push('Vol de vie');
+        if (item.estGlyphe) flags.push('Glyphe');
+        if (item.estPiege) flags.push('Piège');
+        if (item.porteeModifiable === false) flags.push('PO fixe');
         if (item.tauxEchec > 0) flags.push(`Echec ${Math.round(item.tauxEchec * 100)}%`);
         return flags.join(', ') || '-';
       },
@@ -188,6 +191,10 @@ const SortsPage: React.FC = () => {
     { name: 'estDispel', label: 'Est dispel', type: 'checkbox', defaultValue: false },
     { name: 'estInvocation', label: 'Est invocation', type: 'checkbox', defaultValue: false },
     { name: 'estVolDeVie', label: 'Vol de vie', type: 'checkbox', defaultValue: false },
+    { name: 'porteeModifiable', label: 'Portée modifiable par buffs/équipement', type: 'checkbox', defaultValue: true },
+    { name: 'estGlyphe', label: 'Pose un glyphe (zone visible, déclenche au tour)', type: 'checkbox', defaultValue: false },
+    { name: 'estPiege', label: 'Pose un piège (caché, déclenche au passage)', type: 'checkbox', defaultValue: false },
+    { name: 'poseDuree', label: 'Durée de la zone (tours)', type: 'number', defaultValue: 3, min: 1, showIf: (v) => v.estGlyphe === true || v.estPiege === true },
     { name: 'tauxEchec', label: 'Taux echec', type: 'float', defaultValue: 0, step: 0.01 },
     { name: 'niveauApprentissage', label: 'Niveau apprentissage', type: 'number', defaultValue: 1, min: 1 },
     {
@@ -278,6 +285,9 @@ const SortsPage: React.FC = () => {
                 {selectedSort.estDispel && <span className="badge badge-dispel">Dispel</span>}
                 {selectedSort.estInvocation && <span className="badge badge-warning">Invocation</span>}
                 {selectedSort.estVolDeVie && <span className="badge badge-poison">Vol de vie</span>}
+                {selectedSort.estGlyphe && <span className="badge badge-warning">Glyphe{selectedSort.poseDuree ? ` (${selectedSort.poseDuree}t)` : ''}</span>}
+                {selectedSort.estPiege && <span className="badge badge-secondary">Piège{selectedSort.poseDuree ? ` (${selectedSort.poseDuree}t)` : ''}</span>}
+                {selectedSort.porteeModifiable === false && <span className="badge badge-danger">PO fixe</span>}
                 {selectedSort.tauxEchec > 0 && <span className="badge badge-danger">Echec {Math.round(selectedSort.tauxEchec * 100)}%</span>}
                 {selectedSort.race && <span className="badge badge-secondary">{selectedSort.race.nom}</span>}
                 {selectedSort.zone && <span className="badge badge-secondary">{selectedSort.zone.nom}</span>}

@@ -327,7 +327,27 @@ const CharactersPage: React.FC<CharactersPageProps> = ({ playerId: playerIdProp 
           </div>
 
           {/* Spells Section */}
-          <h3 className="section-title">Sorts appris ({spells.length})</h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            <h3 className="section-title" style={{ margin: 0 }}>Sorts appris ({spells.length})</h3>
+            <button
+              className="btn btn-secondary"
+              style={{ fontSize: 11, padding: '2px 8px' }}
+              onClick={async () => {
+                if (!selected) return;
+                const res = await charactersApi.syncSpells(selected.id);
+                if (res.sorts.length > 0) {
+                  const names = res.sorts.map(s => s.nom).join(', ');
+                  setCraftMessage(`Sorts appris : ${names}`);
+                } else {
+                  setCraftMessage('Aucun nouveau sort.');
+                }
+                const updatedSpells = await charactersApi.getSpells(selected.id);
+                setSpells(updatedSpells);
+              }}
+            >
+              Sync sorts
+            </button>
+          </div>
           {spells.length > 0 ? (
             <div className="sort-list">
               {spells.map(s => (

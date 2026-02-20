@@ -28,6 +28,9 @@ export const charactersApi = {
   sendToCharacter: (id: number, body: { destinataireId: number; or?: number; ressources?: { ressourceId: number; quantite: number }[]; items?: number[] }) =>
     api.post(`/characters/${id}/inventory/send`, body).then(r => r.data),
 
+  syncSpells: (id: number) =>
+    api.post<{ message: string; sorts: { sortId: number; nom: string }[] }>(`/characters/${id}/sync-spells`).then(r => r.data),
+
   // Craft
   craft: (id: number, recetteId: number) =>
     api.post(`/characters/${id}/craft/${recetteId}`).then(r => r.data),
