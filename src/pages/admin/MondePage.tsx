@@ -1,14 +1,12 @@
 import React, { useState } from 'react';
 import RegionsPage from './RegionsPage';
 import MapsPage from './MapsPage';
-import GrillesPage from './GrillesPage';
 import DonjonsPage from './DonjonsPage';
 import WorldMapEditor from './WorldMapEditor';
 
 const tabs = [
   { key: 'regions', label: 'Regions' },
   { key: 'maps', label: 'Maps' },
-  { key: 'grilles', label: 'Grilles' },
   { key: 'donjons', label: 'Donjons' },
   { key: 'worldmap', label: 'Carte du monde' },
 ];
@@ -32,7 +30,6 @@ const MondePage: React.FC = () => {
       <div className="tab-content">
         {activeTab === 'regions' && <RegionsPage />}
         {activeTab === 'maps' && <MapsPage />}
-        {activeTab === 'grilles' && <GrillesPage />}
         {activeTab === 'donjons' && <DonjonsPage />}
         {activeTab === 'worldmap' && <WorldMapEditor />}
       </div>

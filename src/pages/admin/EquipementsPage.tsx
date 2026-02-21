@@ -1,41 +1,90 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import DataTable, { type Column } from '../../components/DataTable';
-import FormModal, { type FieldDef } from '../../components/FormModal';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { useCrud } from '../../hooks/useCrud';
-import { equipmentApi, zonesApi, setsApi } from '../../api/static';
-import type { Equipment, Zone, StatType, Panoplie } from '../../types';
+import { equipmentApi } from '../../api/static';
+import type { Equipment, SlotType } from '../../types';
 import '../../styles/admin.css';
 
-const STAT_OPTIONS: { value: StatType; label: string }[] = [
-  { value: 'FORCE', label: 'Force' },
-  { value: 'INTELLIGENCE', label: 'Intelligence' },
-  { value: 'DEXTERITE', label: 'Dexterite' },
-  { value: 'AGILITE', label: 'Agilite' },
-  { value: 'VIE', label: 'Vie' },
-  { value: 'CHANCE', label: 'Chance' },
-];
+const SLOT_OPTIONS: SlotType[] = ['ARME', 'COIFFE', 'AMULETTE', 'BOUCLIER', 'HAUT', 'BAS', 'ANNEAU1', 'ANNEAU2', 'FAMILIER'];
+
+const CreateModal: React.FC<{
+  open: boolean;
+  onCancel: () => void;
+  onCreate: (nom: string, slot: SlotType) => Promise<void>;
+}> = ({ open, onCancel, onCreate }) => {
+  const [nom, setNom] = useState('');
+  const [slot, setSlot] = useState<SlotType>('ARME');
+  const [saving, setSaving] = useState(false);
+
+  const reset = () => { setNom(''); setSlot('ARME'); setSaving(false); };
+  const handleCancel = () => { reset(); onCancel(); };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!nom.trim()) return;
+    setSaving(true);
+    await onCreate(nom.trim(), slot);
+    reset();
+  };
+
+  if (!open) return null;
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal" style={{ width: 380 }}>
+        <div className="modal-header">
+          <h3>Créer un équipement</h3>
+          <button className="modal-close" onClick={handleCancel}>✕</button>
+        </div>
+        <div className="modal-body">
+          <form onSubmit={handleSubmit}>
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 6, textTransform: 'uppercase' }}>
+                Slot
+              </label>
+              <select value={slot} onChange={e => setSlot(e.target.value as SlotType)}
+                style={{ width: '100%', padding: '8px 10px', background: 'var(--bg-light)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontSize: 14 }}>
+                {SLOT_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 6, textTransform: 'uppercase' }}>
+                Nom
+              </label>
+              <input
+                autoFocus
+                type="text"
+                value={nom}
+                onChange={e => setNom(e.target.value)}
+                placeholder={slot === 'ARME' ? 'Ex : Épée en fer' : 'Ex : Casque de guerrier'}
+                style={{ width: '100%', padding: '8px 10px', background: 'var(--bg-light)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontSize: 14, boxSizing: 'border-box' }}
+              />
+            </div>
+            <div style={{ marginTop: 16, display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={handleCancel}>Annuler</button>
+              <button type="submit" className="btn btn-primary" disabled={!nom.trim() || saving}>
+                {saving ? 'Création...' : 'Créer et configurer →'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const EquipementsPage: React.FC = () => {
-  const { items, loading, create, update, remove, refresh } = useCrud(equipmentApi);
-  const [zones, setZones] = useState<Zone[]>([]);
-  const [panoplies, setPanoplies] = useState<Panoplie[]>([]);
-  const [selected, setSelected] = useState<Equipment | null>(null);
-
-  // Ligne add form
-  const [newLigne, setNewLigne] = useState({ degatsMin: 0, degatsMax: 0, statUtilisee: 'FORCE' as StatType, estVolDeVie: false, estSoin: false });
-
-  useEffect(() => {
-    zonesApi.getAll().then(setZones);
-    setsApi.getAll().then(setPanoplies);
-  }, []);
-  const [showForm, setShowForm] = useState(false);
-  const [editing, setEditing] = useState<Equipment | null>(null);
+  const navigate = useNavigate();
+  const { items, loading, create, remove } = useCrud(equipmentApi);
+  const [showCreate, setShowCreate] = useState(false);
   const [deleting, setDeleting] = useState<Equipment | null>(null);
 
-  const selectEquip = async (id: number) => {
-    const eq = await equipmentApi.getById(id);
-    setSelected(eq);
+  const handleCreate = async (nom: string, slot: SlotType) => {
+    const created = await create({ nom, slot, niveauMinimum: 1, poids: 1 });
+    setShowCreate(false);
+    navigate(`/admin/equipements/${created.id}`);
   };
 
   const formatStat = (item: Equipment, stat: string, max: string) => {
@@ -54,249 +103,30 @@ const EquipementsPage: React.FC = () => {
     { key: 'poids', header: 'Poids' },
     { key: 'bonusForce', header: 'FOR', render: (item) => formatStat(item, 'bonusForce', 'bonusForceMax') },
     { key: 'bonusIntelligence', header: 'INT', render: (item) => formatStat(item, 'bonusIntelligence', 'bonusIntelligenceMax') },
+    { key: 'bonusAgilite', header: 'AGI', render: (item) => formatStat(item, 'bonusAgilite', 'bonusAgiliteMax') },
+    { key: 'bonusVie', header: 'VIE', render: (item) => formatStat(item, 'bonusVie', 'bonusVieMax') },
   ];
-
-  const fields: FieldDef[] = [
-    { name: 'nom', label: 'Nom', type: 'text', required: true },
-    {
-      name: 'slot',
-      label: 'Slot',
-      type: 'select',
-      required: true,
-      options: [
-        { value: 'ARME', label: 'Arme' },
-        { value: 'COIFFE', label: 'Coiffe' },
-        { value: 'AMULETTE', label: 'Amulette' },
-        { value: 'BOUCLIER', label: 'Bouclier' },
-        { value: 'HAUT', label: 'Haut' },
-        { value: 'BAS', label: 'Bas' },
-        { value: 'ANNEAU1', label: 'Anneau 1' },
-        { value: 'ANNEAU2', label: 'Anneau 2' },
-        { value: 'FAMILIER', label: 'Familier' },
-      ],
-    },
-    { name: 'niveauMinimum', label: 'Niveau minimum', type: 'number', defaultValue: 1, min: 1 },
-    { name: 'poids', label: 'Poids', type: 'number', defaultValue: 1, min: 0 },
-    {
-      name: 'panoplieId',
-      label: 'Panoplie',
-      type: 'select',
-      options: [{ value: '', label: '-- Aucune --' }, ...panoplies.map(p => ({ value: p.id, label: p.nom }))],
-    },
-    { name: 'bonusForce', label: 'Bonus Force (min)', type: 'number', defaultValue: 0 },
-    { name: 'bonusForceMax', label: 'Bonus Force (max)', type: 'number' },
-    { name: 'bonusIntelligence', label: 'Bonus Intelligence (min)', type: 'number', defaultValue: 0 },
-    { name: 'bonusIntelligenceMax', label: 'Bonus Intelligence (max)', type: 'number' },
-    { name: 'bonusDexterite', label: 'Bonus Dexterite (min)', type: 'number', defaultValue: 0 },
-    { name: 'bonusDexteriteMax', label: 'Bonus Dexterite (max)', type: 'number' },
-    { name: 'bonusAgilite', label: 'Bonus Agilite (min)', type: 'number', defaultValue: 0 },
-    { name: 'bonusAgiliteMax', label: 'Bonus Agilite (max)', type: 'number' },
-    { name: 'bonusVie', label: 'Bonus Vie (min)', type: 'number', defaultValue: 0 },
-    { name: 'bonusVieMax', label: 'Bonus Vie (max)', type: 'number' },
-    { name: 'bonusChance', label: 'Bonus Chance (min)', type: 'number', defaultValue: 0 },
-    { name: 'bonusChanceMax', label: 'Bonus Chance (max)', type: 'number' },
-    { name: 'bonusPA', label: 'Bonus PA (min)', type: 'number', defaultValue: 0 },
-    { name: 'bonusPAMax', label: 'Bonus PA (max)', type: 'number' },
-    { name: 'bonusPM', label: 'Bonus PM (min)', type: 'number', defaultValue: 0 },
-    { name: 'bonusPMMax', label: 'Bonus PM (max)', type: 'number' },
-    { name: 'bonusPO', label: 'Bonus PO (min)', type: 'number', defaultValue: 0 },
-    { name: 'bonusPOMax', label: 'Bonus PO (max)', type: 'number' },
-    { name: 'bonusCritique', label: 'Bonus Critique % (min)', type: 'number', defaultValue: 0 },
-    { name: 'bonusCritiqueMax', label: 'Bonus Critique % (max)', type: 'number' },
-    // Weapon-specific fields (shown only when slot is ARME)
-    {
-      name: 'chanceCritBase',
-      label: 'Chance crit base',
-      type: 'float',
-      defaultValue: 0.05,
-      step: 0.01,
-      showIf: (v) => v.slot === 'ARME',
-    },
-    {
-      name: 'bonusCrit',
-      label: 'Bonus crit (+X sur min/max)',
-      type: 'number',
-      defaultValue: 0,
-      showIf: (v) => v.slot === 'ARME',
-    },
-    {
-      name: 'coutPA',
-      label: 'Cout PA',
-      type: 'number',
-      defaultValue: 4,
-      showIf: (v) => v.slot === 'ARME',
-    },
-    {
-      name: 'porteeMin',
-      label: 'Portee min',
-      type: 'number',
-      defaultValue: 1,
-      showIf: (v) => v.slot === 'ARME',
-    },
-    {
-      name: 'porteeMax',
-      label: 'Portee max',
-      type: 'number',
-      defaultValue: 1,
-      showIf: (v) => v.slot === 'ARME',
-    },
-    {
-      name: 'ligneDeVue',
-      label: 'Ligne de vue',
-      type: 'checkbox',
-      defaultValue: true,
-      showIf: (v) => v.slot === 'ARME',
-    },
-    {
-      name: 'zoneId',
-      label: 'Zone',
-      type: 'select',
-      options: zones.map(z => ({ value: z.id, label: `${z.nom} (${z.type})` })),
-      showIf: (v) => v.slot === 'ARME',
-    },
-    {
-      name: 'cooldown',
-      label: 'Cooldown',
-      type: 'number',
-      defaultValue: 0,
-      showIf: (v) => v.slot === 'ARME',
-    },
-    {
-      name: 'tauxEchec',
-      label: 'Taux echec',
-      type: 'float',
-      defaultValue: 0,
-      step: 0.01,
-      showIf: (v) => v.slot === 'ARME',
-    },
-  ];
-
-  const handleAddLigne = async () => {
-    if (!selected) return;
-    const nextOrdre = (selected.lignesDegats?.length ?? 0) + 1;
-    await equipmentApi.addLigne(selected.id, { ...newLigne, ordre: nextOrdre });
-    await selectEquip(selected.id);
-    await refresh();
-    setNewLigne({ degatsMin: 0, degatsMax: 0, statUtilisee: 'FORCE', estVolDeVie: false, estSoin: false });
-  };
-
-  const handleRemoveLigne = async (ligneId: number) => {
-    if (!selected) return;
-    await equipmentApi.removeLigne(selected.id, ligneId);
-    await selectEquip(selected.id);
-    await refresh();
-  };
 
   return (
     <div className="admin-page">
       <div className="page-header">
         <h1>Equipements</h1>
-        <button className="btn btn-primary" onClick={() => { setEditing(null); setShowForm(true); }}>
-          + Creer
-        </button>
+        <button className="btn btn-primary" onClick={() => setShowCreate(true)}>+ Créer</button>
       </div>
       <DataTable
         columns={columns}
         data={items}
         loading={loading}
-        onEdit={item => { setEditing(item); setShowForm(true); }}
         onDelete={item => setDeleting(item)}
-        onRowClick={item => selectEquip(item.id)}
-        selectedId={selected?.id}
+        onRowClick={item => navigate(`/admin/equipements/${item.id}`)}
       />
 
-      {/* Detail panel for weapons */}
-      {selected && selected.slot === 'ARME' && (
-        <div className="detail-panel">
-          <h3>{selected.nom} <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>Niv. {selected.niveauMinimum}</span></h3>
-          <div className="detail-sections">
-            <div className="detail-section">
-              <h4>Attaque</h4>
-              <div className="stat-grid">
-                <div className="stat-row">
-                  <span className="stat-label">% Crit</span>
-                  <span className="stat-value">{Math.round((selected.chanceCritBase ?? 0) * 100)}%</span>
-                </div>
-                <div className="stat-row">
-                  <span className="stat-label">Bonus crit</span>
-                  <span className="stat-value">+{selected.bonusCrit ?? 0}</span>
-                </div>
-                <div className="stat-row">
-                  <span className="stat-label">PA</span>
-                  <span className="stat-value">{selected.coutPA}</span>
-                </div>
-                <div className="stat-row">
-                  <span className="stat-label">Portee</span>
-                  <span className="stat-value">{selected.porteeMin}-{selected.porteeMax}</span>
-                </div>
-                {selected.tauxEchec != null && selected.tauxEchec > 0 && (
-                  <div className="stat-row">
-                    <span className="stat-label">Echec</span>
-                    <span className="stat-value" style={{ color: 'var(--danger)' }}>{Math.round(selected.tauxEchec * 100)}%</span>
-                  </div>
-                )}
-              </div>
-            </div>
+      <CreateModal open={showCreate} onCancel={() => setShowCreate(false)} onCreate={handleCreate} />
 
-            <div className="detail-section">
-              <h4>Lignes de degats ({selected.lignesDegats?.length ?? 0})</h4>
-              {selected.lignesDegats && selected.lignesDegats.length > 0 ? (
-                <div className="sort-list">
-                  {selected.lignesDegats.map(l => (
-                    <div key={l.id} className="sort-item">
-                      <div>
-                        <span className="sort-name">Ligne {l.ordre}</span>
-                        <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--text-muted)' }}>
-                          {l.degatsMin}-{l.degatsMax} {l.statUtilisee}
-                          {l.estVolDeVie && <span style={{ color: '#00c853', marginLeft: 4 }}>Vol de vie</span>}
-                          {l.estSoin && <span style={{ color: 'var(--success)', marginLeft: 4 }}>Soin</span>}
-                        </span>
-                      </div>
-                      <button className="btn btn-sm btn-danger" onClick={() => handleRemoveLigne(l.id)}>X</button>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 8 }}>
-                  Aucune ligne — arme inutilisable en combat
-                </div>
-              )}
-
-              <div className="inline-add" style={{ flexWrap: 'wrap' }}>
-                <input type="number" placeholder="Min" value={newLigne.degatsMin} onChange={e => setNewLigne(p => ({ ...p, degatsMin: +e.target.value }))} style={{ width: 50 }} />
-                <input type="number" placeholder="Max" value={newLigne.degatsMax} onChange={e => setNewLigne(p => ({ ...p, degatsMax: +e.target.value }))} style={{ width: 50 }} />
-                <select value={newLigne.statUtilisee} onChange={e => setNewLigne(p => ({ ...p, statUtilisee: e.target.value as StatType }))}>
-                  {STAT_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-                </select>
-                <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 2 }}>
-                  <input type="checkbox" checked={newLigne.estVolDeVie} onChange={e => setNewLigne(p => ({ ...p, estVolDeVie: e.target.checked }))} /> VdV
-                </label>
-                <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 2 }}>
-                  <input type="checkbox" checked={newLigne.estSoin} onChange={e => setNewLigne(p => ({ ...p, estSoin: e.target.checked }))} /> Soin
-                </label>
-                <button className="btn btn-sm btn-primary" onClick={handleAddLigne}>+ Ajouter</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <FormModal
-        open={showForm}
-        title={editing ? 'Modifier un equipement' : 'Creer un equipement'}
-        fields={fields}
-        initialValues={editing || undefined}
-        onSubmit={async (vals) => {
-          if (editing) await update(editing.id, vals);
-          else await create(vals);
-          setShowForm(false);
-        }}
-        onCancel={() => setShowForm(false)}
-      />
       <ConfirmDialog
         open={!!deleting}
         message={`Supprimer "${deleting?.nom}" ?`}
-        onConfirm={async () => { if (deleting) await remove(deleting.id); setDeleting(null); }}
+        onConfirm={async () => { if (deleting) { await remove(deleting.id); setDeleting(null); } }}
         onCancel={() => setDeleting(null)}
       />
     </div>

@@ -1,45 +1,206 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import DataTable, { type Column } from '../../components/DataTable';
-import FormModal, { type FieldDef } from '../../components/FormModal';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { useCrud } from '../../hooks/useCrud';
-import { sortsApi, racesApi, zonesApi, effetsApi } from '../../api/static';
-import { monstresApi } from '../../api/maps';
-import type { Sort, Race, Zone, Effet, MonsterTemplate } from '../../types';
+import { sortsApi, racesApi } from '../../api/static';
+import type { Sort, Race, StatType } from '../../types';
 import '../../styles/admin.css';
 
-// Normalize effect from either flat (combat) or nested (API) format
-const getEffetNom = (e: NonNullable<Sort['effets']>[number]) => e.nom || e.effet?.nom || '';
-const getEffetType = (e: NonNullable<Sort['effets']>[number]) => e.type || e.effet?.type || '';
-const getEffetStat = (e: NonNullable<Sort['effets']>[number]) => e.statCiblee || e.effet?.statCiblee || '';
-const getEffetValeur = (e: NonNullable<Sort['effets']>[number]) => e.valeur ?? e.effet?.valeur ?? 0;
-const getEffetValeurMin = (e: NonNullable<Sort['effets']>[number]) => e.valeurMin ?? e.effet?.valeurMin ?? null;
-const getEffetDuree = (e: NonNullable<Sort['effets']>[number]) => e.duree ?? e.effet?.duree ?? 0;
-const getEffetId = (e: NonNullable<Sort['effets']>[number]) => e.effetId || e.effet?.id || 0;
-
 type TabFilter = 'all' | 'race' | 'monstre' | 'invocation';
+type CreateStep = 'origin' | 'race' | 'flags' | 'name';
+type SortOrigin = 'race' | 'monstre' | 'neutre';
+
+// Flags disponibles à la création
+const FLAG_OPTIONS = [
+  { key: 'estSoin', label: '💚 Soin', desc: 'Soigne au lieu de blesser' },
+  { key: 'estDispel', label: '✨ Dispel', desc: 'Supprime les effets actifs' },
+  { key: 'estInvocation', label: '🔮 Invocation', desc: 'Invoque un familier' },
+  { key: 'estVolDeVie', label: '🩸 Vol de vie', desc: 'Regagne des PV sur les dégâts' },
+  { key: 'estGlyphe', label: '🔶 Glyphe', desc: 'Pose une zone visible (déclenche au tour)' },
+  { key: 'estPiege', label: '🪤 Piège', desc: 'Pose une zone cachée (déclenche au passage)' },
+  { key: 'estDispelOnly', label: '⚔️ Standard', desc: 'Sort de dégâts ou utilitaire normal' },
+] as const;
+
+const CreateModal: React.FC<{
+  open: boolean;
+  races: Race[];
+  onCancel: () => void;
+  onCreate: (nom: string, payload: Partial<Sort>) => Promise<void>;
+}> = ({ open, races, onCancel, onCreate }) => {
+  const [step, setStep] = useState<CreateStep>('origin');
+  const [origin, setOrigin] = useState<SortOrigin>('neutre');
+  const [selectedRaceId, setSelectedRaceId] = useState<number | null>(null);
+  const [flags, setFlags] = useState<string[]>(['estDispelOnly']);
+  const [nom, setNom] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const reset = () => { setStep('origin'); setOrigin('neutre'); setSelectedRaceId(null); setFlags(['estDispelOnly']); setNom(''); setSaving(false); };
+  const handleCancel = () => { reset(); onCancel(); };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!nom.trim()) return;
+    setSaving(true);
+    const payload: Partial<Sort> = {
+      nom: nom.trim(),
+      type: 'SORT',
+      statUtilisee: 'INTELLIGENCE' as StatType,
+      coutPA: 3,
+      porteeMin: 1,
+      porteeMax: 5,
+      ligneDeVue: true,
+      degatsMin: 0,
+      degatsMax: 0,
+      degatsCritMin: 0,
+      degatsCritMax: 0,
+      chanceCritBase: 0.01,
+      cooldown: 0,
+      tauxEchec: 0,
+      niveauApprentissage: 1,
+      raceId: origin === 'race' ? selectedRaceId : null,
+      zoneId: null,
+      invocationTemplateId: null,
+      estSoin: flags.includes('estSoin'),
+      estDispel: flags.includes('estDispel'),
+      estInvocation: flags.includes('estInvocation'),
+      estVolDeVie: flags.includes('estVolDeVie'),
+      estGlyphe: flags.includes('estGlyphe'),
+      estPiege: flags.includes('estPiege'),
+      porteeModifiable: !flags.includes('estInvocation'),
+    };
+    await onCreate(nom.trim(), payload);
+    reset();
+  };
+
+  const nextStep = () => {
+    if (step === 'origin') {
+      if (origin === 'race') setStep('race');
+      else setStep('flags');
+    } else if (step === 'race') {
+      setStep('flags');
+    } else if (step === 'flags') {
+      setStep('name');
+    }
+  };
+
+  if (!open) return null;
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal" style={{ width: 440 }}>
+        <div className="modal-header">
+          <h3>Créer un sort</h3>
+          <button className="modal-close" onClick={handleCancel}>✕</button>
+        </div>
+        <div className="modal-body">
+          {step === 'origin' && (
+            <div>
+              <p style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 12 }}>Ce sort appartient à :</p>
+              <div style={{ display: 'flex', gap: 10 }}>
+                {([
+                  { key: 'race', label: '🧝 Race', desc: 'Sort appris par une race de personnage' },
+                  { key: 'monstre', label: '👹 Monstre', desc: 'Sort utilisé par des monstres' },
+                  { key: 'neutre', label: '⚡ Neutre', desc: 'Sort générique / utilitaire' },
+                ] as { key: SortOrigin; label: string; desc: string }[]).map(o => (
+                  <button
+                    key={o.key}
+                    className={`btn ${origin === o.key ? 'btn-primary' : 'btn-secondary'}`}
+                    style={{ flex: 1, padding: '14px 8px', fontSize: 13 }}
+                    onClick={() => setOrigin(o.key)}
+                  >
+                    {o.label}
+                    <div style={{ fontSize: 10, opacity: 0.7, marginTop: 4 }}>{o.desc}</div>
+                  </button>
+                ))}
+              </div>
+              <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end' }}>
+                <button className="btn btn-primary" onClick={nextStep}>Suivant →</button>
+              </div>
+            </div>
+          )}
+
+          {step === 'race' && (
+            <div>
+              <p style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 8 }}>Choisir la race :</p>
+              <select
+                value={selectedRaceId ?? ''}
+                onChange={e => setSelectedRaceId(Number(e.target.value))}
+                style={{ width: '100%', padding: '8px 10px', background: 'var(--bg-light)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontSize: 14 }}
+              >
+                <option value="">-- Sélectionner --</option>
+                {races.map(r => <option key={r.id} value={r.id}>{r.nom}</option>)}
+              </select>
+              <div style={{ marginTop: 16, display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                <button className="btn btn-secondary btn-sm" onClick={() => setStep('origin')}>← Retour</button>
+                <button className="btn btn-primary" onClick={nextStep} disabled={!selectedRaceId}>Suivant →</button>
+              </div>
+            </div>
+          )}
+
+          {step === 'flags' && (
+            <div>
+              <p style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 8 }}>Type de sort (peut en cocher plusieurs) :</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {FLAG_OPTIONS.filter(f => f.key !== 'estDispelOnly').map(f => (
+                  <label key={f.key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: flags.includes(f.key) ? 'rgba(233,69,96,0.1)' : 'var(--bg-light)', border: `1px solid ${flags.includes(f.key) ? 'var(--primary)' : 'var(--border)'}`, borderRadius: 6, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={flags.includes(f.key)} onChange={e => {
+                      if (e.target.checked) setFlags(prev => [...prev.filter(k => k !== 'estDispelOnly'), f.key]);
+                      else setFlags(prev => { const next = prev.filter(k => k !== f.key); return next.length === 0 ? ['estDispelOnly'] : next; });
+                    }} />
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 600 }}>{f.label}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{f.desc}</div>
+                    </div>
+                  </label>
+                ))}
+                {flags.length === 0 || (flags.length === 1 && flags[0] === 'estDispelOnly') ? (
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>Aucun flag = sort de dégâts standard</div>
+                ) : null}
+              </div>
+              <div style={{ marginTop: 16, display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                <button className="btn btn-secondary btn-sm" onClick={() => origin === 'race' ? setStep('race') : setStep('origin')}>← Retour</button>
+                <button className="btn btn-primary" onClick={nextStep}>Suivant →</button>
+              </div>
+            </div>
+          )}
+
+          {step === 'name' && (
+            <form onSubmit={handleSubmit}>
+              <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 6, textTransform: 'uppercase' }}>
+                Nom du sort
+              </label>
+              <input
+                autoFocus
+                type="text"
+                value={nom}
+                onChange={e => setNom(e.target.value)}
+                placeholder="Ex : Boule de feu"
+                style={{ width: '100%', padding: '8px 10px', background: 'var(--bg-light)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontSize: 14, boxSizing: 'border-box' }}
+              />
+              <div style={{ marginTop: 16, display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                <button type="button" className="btn btn-secondary btn-sm" onClick={() => setStep('flags')}>← Retour</button>
+                <button type="submit" className="btn btn-primary" disabled={!nom.trim() || saving}>
+                  {saving ? 'Création...' : 'Créer et configurer →'}
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const SortsPage: React.FC = () => {
-  const { items, loading, create, update, remove, refresh } = useCrud(sortsApi);
-  const [showForm, setShowForm] = useState(false);
-  const [editing, setEditing] = useState<Sort | null>(null);
+  const navigate = useNavigate();
+  const { items, loading, create, remove } = useCrud(sortsApi);
+  const [showCreate, setShowCreate] = useState(false);
   const [deleting, setDeleting] = useState<Sort | null>(null);
   const [races, setRaces] = useState<Race[]>([]);
-  const [zones, setZones] = useState<Zone[]>([]);
-  const [allEffets, setAllEffets] = useState<Effet[]>([]);
   const [activeTab, setActiveTab] = useState<TabFilter>('all');
-  const [selectedSort, setSelectedSort] = useState<Sort | null>(null);
-  const [addEffetId, setAddEffetId] = useState<number>(0);
-  const [addChance, setAddChance] = useState<number>(100);
-  const [addSurCible, setAddSurCible] = useState<boolean>(true);
-  const [monstres, setMonstres] = useState<MonsterTemplate[]>([]);
 
-  useEffect(() => {
-    racesApi.getAll().then(setRaces);
-    zonesApi.getAll().then(setZones);
-    effetsApi.getAll().then(setAllEffets);
-    monstresApi.getAll().then(setMonstres);
-  }, []);
+  useEffect(() => { racesApi.getAll().then(setRaces); }, []);
 
   const filteredItems = items.filter(sort => {
     switch (activeTab) {
@@ -50,37 +211,14 @@ const SortsPage: React.FC = () => {
     }
   });
 
-  // Group race sorts by race name for display
-  const getRaceGroup = (sort: Sort): string => {
-    if (!sort.race) return '';
-    return sort.race.nom;
-  };
-
   const sortedItems = activeTab === 'race'
-    ? [...filteredItems].sort((a, b) => getRaceGroup(a).localeCompare(getRaceGroup(b)))
+    ? [...filteredItems].sort((a, b) => (a.race?.nom || '').localeCompare(b.race?.nom || ''))
     : filteredItems;
 
-  const selectSort = async (id: number) => {
-    const detail = await sortsApi.getById(id);
-    setSelectedSort(detail);
-  };
-
-  const handleAddEffect = async () => {
-    if (!selectedSort || !addEffetId) return;
-    await sortsApi.addEffect(selectedSort.id, {
-      effetId: addEffetId,
-      chanceDeclenchement: addChance / 100,
-      surCible: addSurCible,
-    });
-    await selectSort(selectedSort.id);
-    refresh();
-  };
-
-  const handleRemoveEffect = async (effetId: number) => {
-    if (!selectedSort) return;
-    await sortsApi.removeEffect(selectedSort.id, effetId);
-    await selectSort(selectedSort.id);
-    refresh();
+  const handleCreate = async (nom: string, payload: Partial<Sort>) => {
+    const created = await create(payload);
+    setShowCreate(false);
+    navigate(`/admin/sorts/${created.id}`);
   };
 
   const columns: Column<Sort>[] = [
@@ -89,156 +227,46 @@ const SortsPage: React.FC = () => {
     { key: 'type', header: 'Type' },
     { key: 'statUtilisee', header: 'Stat' },
     { key: 'coutPA', header: 'PA' },
+    { key: 'degats', header: 'Dégâts', render: (item) => `${item.degatsMin}-${item.degatsMax}` },
+    { key: 'portee', header: 'Portée', render: (item) => `${item.porteeMin}-${item.porteeMax}` },
     {
-      key: 'degats',
-      header: 'Degats',
-      render: (item) => `${item.degatsMin}-${item.degatsMax}`,
-    },
-    {
-      key: 'portee',
-      header: 'Portee',
-      render: (item) => `${item.porteeMin}-${item.porteeMax}`,
-    },
-    {
-      key: 'flags',
-      header: 'Type',
+      key: 'flags', header: 'Flags',
       render: (item) => {
         const flags: string[] = [];
         if (item.estSoin) flags.push('Soin');
         if (item.estDispel) flags.push('Dispel');
         if (item.estInvocation) flags.push('Invoc.');
-        if (item.estVolDeVie) flags.push('Vol de vie');
+        if (item.estVolDeVie) flags.push('VdV');
         if (item.estGlyphe) flags.push('Glyphe');
         if (item.estPiege) flags.push('Piège');
-        if (item.porteeModifiable === false) flags.push('PO fixe');
-        if (item.tauxEchec > 0) flags.push(`Echec ${Math.round(item.tauxEchec * 100)}%`);
+        if (item.tauxEchec > 0) flags.push(`${Math.round(item.tauxEchec * 100)}%`);
         return flags.join(', ') || '-';
       },
     },
-    {
-      key: 'description',
-      header: 'Description',
-      render: (item) => item.description || '-',
-    },
-    {
-      key: 'effets',
-      header: 'Effets',
-      render: (item) => {
-        if (!item.effets || item.effets.length === 0) return '-';
-        return (
-          <div className="effect-badges">
-            {item.effets.map((e, i) => {
-              const type = getEffetType(e);
-              const badgeClass = type === 'DISPEL' ? 'dispel' : type === 'BUFF' ? 'buff' : type === 'POISON' ? 'poison' : (type === 'POUSSEE' || type === 'ATTIRANCE') ? 'movement' : 'debuff';
-              const valMin = getEffetValeurMin(e);
-              const valDisplay = type === 'POISON' && valMin != null ? `${valMin}-${getEffetValeur(e)} dgts/tour` : `${getEffetValeur(e) > 0 ? '+' : ''}${getEffetValeur(e)} ${getEffetStat(e)}`;
-              return (
-                <span key={i} className={`effect-badge ${badgeClass}`}>
-                  {getEffetNom(e)} ({valDisplay}, {getEffetDuree(e)}t, {Math.round(e.chanceDeclenchement * 100)}%)
-                </span>
-              );
-            })}
-          </div>
-        );
-      },
-    },
-    { key: 'niveauApprentissage', header: 'Niveau' },
-    {
-      key: 'race',
-      header: 'Race',
-      render: (item) => item.race?.nom ?? '-',
-    },
+    { key: 'niveauApprentissage', header: 'Niv.' },
+    { key: 'race', header: 'Race', render: (item) => item.race?.nom ?? '-' },
     { key: 'cooldown', header: 'CD' },
   ];
 
-  const fields: FieldDef[] = [
-    { name: 'nom', label: 'Nom', type: 'text', required: true },
-    {
-      name: 'type',
-      label: 'Type',
-      type: 'select',
-      options: [
-        { value: 'ARME', label: 'Arme' },
-        { value: 'SORT', label: 'Sort' },
-      ],
-      defaultValue: 'SORT',
-    },
-    {
-      name: 'statUtilisee',
-      label: 'Stat utilisee',
-      type: 'select',
-      options: [
-        { value: 'FORCE', label: 'Force' },
-        { value: 'INTELLIGENCE', label: 'Intelligence' },
-        { value: 'DEXTERITE', label: 'Dexterite' },
-        { value: 'AGILITE', label: 'Agilite' },
-        { value: 'VIE', label: 'Vie' },
-        { value: 'CHANCE', label: 'Chance' },
-      ],
-      defaultValue: 'INTELLIGENCE',
-    },
-    { name: 'coutPA', label: 'Cout PA', type: 'number', defaultValue: 3, min: 0 },
-    { name: 'porteeMin', label: 'Portee min', type: 'number', defaultValue: 1, min: 0 },
-    { name: 'porteeMax', label: 'Portee max', type: 'number', defaultValue: 5, min: 0 },
-    { name: 'ligneDeVue', label: 'Ligne de vue', type: 'checkbox', defaultValue: true },
-    { name: 'degatsMin', label: 'Degats min', type: 'number', defaultValue: 0, min: 0 },
-    { name: 'degatsMax', label: 'Degats max', type: 'number', defaultValue: 0, min: 0 },
-    { name: 'degatsCritMin', label: 'Degats crit min', type: 'number', defaultValue: 0, min: 0 },
-    { name: 'degatsCritMax', label: 'Degats crit max', type: 'number', defaultValue: 0, min: 0 },
-    { name: 'chanceCritBase', label: 'Chance crit base', type: 'float', defaultValue: 0.01, step: 0.01 },
-    { name: 'cooldown', label: 'Cooldown', type: 'number', defaultValue: 0, min: 0 },
-    { name: 'estSoin', label: 'Est soin', type: 'checkbox', defaultValue: false },
-    { name: 'estDispel', label: 'Est dispel', type: 'checkbox', defaultValue: false },
-    { name: 'estInvocation', label: 'Est invocation', type: 'checkbox', defaultValue: false },
-    { name: 'estVolDeVie', label: 'Vol de vie', type: 'checkbox', defaultValue: false },
-    { name: 'porteeModifiable', label: 'Portée modifiable par buffs/équipement', type: 'checkbox', defaultValue: true },
-    { name: 'estGlyphe', label: 'Pose un glyphe (zone visible, déclenche au tour)', type: 'checkbox', defaultValue: false },
-    { name: 'estPiege', label: 'Pose un piège (caché, déclenche au passage)', type: 'checkbox', defaultValue: false },
-    { name: 'poseDuree', label: 'Durée de la zone (tours)', type: 'number', defaultValue: 3, min: 1, showIf: (v) => v.estGlyphe === true || v.estPiege === true },
-    { name: 'tauxEchec', label: 'Taux echec', type: 'float', defaultValue: 0, step: 0.01 },
-    { name: 'niveauApprentissage', label: 'Niveau apprentissage', type: 'number', defaultValue: 1, min: 1 },
-    {
-      name: 'raceId',
-      label: 'Race',
-      type: 'select',
-      options: races.map(r => ({ value: r.id, label: r.nom })),
-    },
-    {
-      name: 'zoneId',
-      label: 'Zone',
-      type: 'select',
-      options: zones.map(z => ({ value: z.id, label: `${z.nom} (${z.type})` })),
-    },
-    {
-      name: 'invocationTemplateId',
-      label: 'Template invocation',
-      type: 'select',
-      options: monstres.map(m => ({ value: m.id, label: `${m.nom} (ID ${m.id})` })),
-      showIf: (v) => v.estInvocation === true,
-    },
-  ];
-
-  const tabs: { key: TabFilter; label: string; count: number }[] = [
-    { key: 'all', label: 'Tous', count: items.length },
-    { key: 'race', label: 'Sorts de race', count: items.filter(s => s.raceId !== null).length },
-    { key: 'monstre', label: 'Sorts de monstre', count: items.filter(s => s.raceId === null && !s.estInvocation).length },
-    { key: 'invocation', label: 'Invocations', count: items.filter(s => s.estInvocation).length },
+  const tabs = [
+    { key: 'all' as TabFilter, label: 'Tous', count: items.length },
+    { key: 'race' as TabFilter, label: 'Sorts de race', count: items.filter(s => s.raceId !== null).length },
+    { key: 'monstre' as TabFilter, label: 'Sorts de monstre', count: items.filter(s => s.raceId === null && !s.estInvocation).length },
+    { key: 'invocation' as TabFilter, label: 'Invocations', count: items.filter(s => s.estInvocation).length },
   ];
 
   return (
     <div className="admin-page">
       <div className="page-header">
         <h1>Sorts</h1>
-        <button className="btn btn-primary" onClick={() => { setEditing(null); setShowForm(true); }}>
-          + Creer
-        </button>
+        <button className="btn btn-primary" onClick={() => setShowCreate(true)}>+ Créer</button>
       </div>
       <div className="tabs">
         {tabs.map(tab => (
           <button
             key={tab.key}
             className={`tab-btn ${activeTab === tab.key ? 'active' : ''}`}
-            onClick={() => { setActiveTab(tab.key); setSelectedSort(null); }}
+            onClick={() => setActiveTab(tab.key)}
           >
             {tab.label} ({tab.count})
           </button>
@@ -248,126 +276,16 @@ const SortsPage: React.FC = () => {
         columns={columns}
         data={sortedItems}
         loading={loading}
-        onEdit={item => { setEditing(item); setShowForm(true); }}
         onDelete={item => setDeleting(item)}
-        onRowClick={item => selectSort(item.id)}
-        selectedId={selectedSort?.id}
+        onRowClick={item => navigate(`/admin/sorts/${item.id}`)}
       />
 
-      {selectedSort && (
-        <div className="detail-panel">
-          <h3>
-            {selectedSort.nom}
-            <button className="btn btn-sm btn-secondary" onClick={() => setSelectedSort(null)}>Fermer</button>
-          </h3>
-          <div className="detail-sections">
-            <div className="detail-section">
-              <h4>Proprietes</h4>
-              <div className="stat-grid">
-                {([
-                  ['Type', selectedSort.type],
-                  ['Stat', selectedSort.statUtilisee],
-                  ['Cout PA', selectedSort.coutPA],
-                  ['Portee', `${selectedSort.porteeMin}-${selectedSort.porteeMax}`],
-                  ['Degats', `${selectedSort.degatsMin}-${selectedSort.degatsMax}`],
-                  ['Crit', `${selectedSort.degatsCritMin}-${selectedSort.degatsCritMax}`],
-                  ['Cooldown', selectedSort.cooldown],
-                  ['Niveau', selectedSort.niveauApprentissage],
-                ] as [string, string | number][]).map(([label, val]) => (
-                  <div key={label} className="stat-row">
-                    <span className="stat-label">{label}</span>
-                    <span className="stat-value">{val}</span>
-                  </div>
-                ))}
-              </div>
-              <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {selectedSort.estSoin && <span className="badge badge-success">Soin</span>}
-                {selectedSort.estDispel && <span className="badge badge-dispel">Dispel</span>}
-                {selectedSort.estInvocation && <span className="badge badge-warning">Invocation</span>}
-                {selectedSort.estVolDeVie && <span className="badge badge-poison">Vol de vie</span>}
-                {selectedSort.estGlyphe && <span className="badge badge-warning">Glyphe{selectedSort.poseDuree ? ` (${selectedSort.poseDuree}t)` : ''}</span>}
-                {selectedSort.estPiege && <span className="badge badge-secondary">Piège{selectedSort.poseDuree ? ` (${selectedSort.poseDuree}t)` : ''}</span>}
-                {selectedSort.porteeModifiable === false && <span className="badge badge-danger">PO fixe</span>}
-                {selectedSort.tauxEchec > 0 && <span className="badge badge-danger">Echec {Math.round(selectedSort.tauxEchec * 100)}%</span>}
-                {selectedSort.race && <span className="badge badge-secondary">{selectedSort.race.nom}</span>}
-                {selectedSort.zone && <span className="badge badge-secondary">{selectedSort.zone.nom}</span>}
-              </div>
-            </div>
+      <CreateModal open={showCreate} races={races} onCancel={() => setShowCreate(false)} onCreate={handleCreate} />
 
-            <div className="detail-section">
-              <h4>Effets lies ({selectedSort.effets?.length || 0})</h4>
-              <div className="sort-list">
-                {selectedSort.effets && selectedSort.effets.length > 0 ? (
-                  selectedSort.effets.map((e, i) => {
-                    const type = getEffetType(e);
-                    const badgeClass = type === 'DISPEL' ? 'badge-dispel' : type === 'BUFF' ? 'badge-success' : type === 'POISON' ? 'badge-poison' : (type === 'POUSSEE' || type === 'ATTIRANCE') ? 'badge-movement' : 'badge-danger';
-                    return (
-                      <div key={i} className="sort-item">
-                        <div>
-                          <span className="sort-name">{getEffetNom(e)}</span>
-                          <span className="sort-meta">
-                            <span className={`badge ${badgeClass}`}>{type}</span>
-                            <span>{type === 'POISON' && getEffetValeurMin(e) != null ? `${getEffetValeurMin(e)}-${getEffetValeur(e)} dgts/tour` : `${getEffetValeur(e) > 0 ? '+' : ''}${getEffetValeur(e)} ${getEffetStat(e)}`}</span>
-                            <span>{getEffetDuree(e)}t</span>
-                            <span>{Math.round(e.chanceDeclenchement * 100)}%</span>
-                            <span>{e.surCible ? 'Sur cible' : 'Sur lanceur'}</span>
-                          </span>
-                        </div>
-                        <button className="btn btn-sm btn-danger" onClick={() => handleRemoveEffect(getEffetId(e))}>X</button>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Aucun effet lie</div>
-                )}
-              </div>
-              <div className="inline-add">
-                <select value={addEffetId} onChange={e => setAddEffetId(Number(e.target.value))}>
-                  <option value={0}>-- Effet --</option>
-                  {allEffets.map(ef => (
-                    <option key={ef.id} value={ef.id}>{ef.nom} ({ef.type})</option>
-                  ))}
-                </select>
-                <input
-                  type="number"
-                  value={addChance}
-                  onChange={e => setAddChance(Number(e.target.value))}
-                  min={1}
-                  max={100}
-                  style={{ width: 60 }}
-                  placeholder="%"
-                />
-                <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13 }}>
-                  <input
-                    type="checkbox"
-                    checked={addSurCible}
-                    onChange={e => setAddSurCible(e.target.checked)}
-                  />
-                  Sur cible
-                </label>
-                <button className="btn btn-sm btn-success" onClick={handleAddEffect} disabled={!addEffetId}>+ Ajouter</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <FormModal
-        open={showForm}
-        title={editing ? 'Modifier un sort' : 'Creer un sort'}
-        fields={fields}
-        initialValues={editing || undefined}
-        onSubmit={async (vals) => {
-          if (editing) await update(editing.id, vals);
-          else await create(vals);
-          setShowForm(false);
-        }}
-        onCancel={() => setShowForm(false)}
-      />
       <ConfirmDialog
         open={!!deleting}
         message={`Supprimer "${deleting?.nom}" ?`}
-        onConfirm={async () => { if (deleting) await remove(deleting.id); setDeleting(null); }}
+        onConfirm={async () => { if (deleting) { await remove(deleting.id); setDeleting(null); } }}
         onCancel={() => setDeleting(null)}
       />
     </div>

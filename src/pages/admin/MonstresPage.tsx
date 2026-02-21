@@ -1,44 +1,99 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import DataTable, { type Column } from '../../components/DataTable';
-import FormModal, { type FieldDef } from '../../components/FormModal';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { useCrud } from '../../hooks/useCrud';
-import { monstresApi, regionsApi } from '../../api/maps';
-import { sortsApi, equipmentApi, resourcesApi } from '../../api/static';
-import type { MonsterTemplate, Sort, Equipment, Ressource, Region } from '../../types';
+import { monstresApi } from '../../api/maps';
+import type { MonsterTemplate, IAType } from '../../types';
 import '../../styles/admin.css';
 
 type MonsterTab = 'ennemis' | 'invocations';
 
+// Modal de création minimal : type + nom
+const CreateModal: React.FC<{
+  open: boolean;
+  onCancel: () => void;
+  onCreate: (nom: string, isInvoc: boolean) => Promise<void>;
+}> = ({ open, onCancel, onCreate }) => {
+  const [step, setStep] = useState<'type' | 'name'>('type');
+  const [isInvoc, setIsInvoc] = useState(false);
+  const [nom, setNom] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const reset = () => { setStep('type'); setIsInvoc(false); setNom(''); setSaving(false); };
+
+  const handleCancel = () => { reset(); onCancel(); };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!nom.trim()) return;
+    setSaving(true);
+    await onCreate(nom.trim(), isInvoc);
+    reset();
+  };
+
+  if (!open) return null;
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal" style={{ width: 380 }}>
+        <div className="modal-header">
+          <h3>Créer un monstre</h3>
+          <button className="modal-close" onClick={handleCancel}>✕</button>
+        </div>
+        <div className="modal-body">
+          {step === 'type' ? (
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center', padding: '16px 0' }}>
+              <button
+                className="btn btn-danger"
+                style={{ flex: 1, padding: '20px 12px', fontSize: 15 }}
+                onClick={() => { setIsInvoc(false); setStep('name'); }}
+              >
+                👹 Ennemi
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.7)', marginTop: 4 }}>Drops, régions, XP</div>
+              </button>
+              <button
+                className="btn btn-warning"
+                style={{ flex: 1, padding: '20px 12px', fontSize: 15 }}
+                onClick={() => { setIsInvoc(true); setStep('name'); }}
+              >
+                ✨ Invocation
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.7)', marginTop: 4 }}>Sorts d'invocation</div>
+              </button>
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit}>
+              <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 6, textTransform: 'uppercase' }}>
+                Nom du {isInvoc ? 'familier / invocation' : 'monstre'}
+              </label>
+              <input
+                autoFocus
+                type="text"
+                value={nom}
+                onChange={e => setNom(e.target.value)}
+                placeholder={isInvoc ? 'Ex : Golem de pierre' : 'Ex : Gobelin des bois'}
+                style={{ width: '100%', padding: '8px 10px', background: 'var(--bg-light)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontSize: 14, boxSizing: 'border-box' }}
+              />
+              <div style={{ marginTop: 16, display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                <button type="button" className="btn btn-secondary btn-sm" onClick={() => setStep('type')}>← Retour</button>
+                <button type="submit" className="btn btn-primary" disabled={!nom.trim() || saving}>
+                  {saving ? 'Création...' : 'Créer et configurer →'}
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const MonstresPage: React.FC = () => {
-  const { items, loading, create, update, remove, refresh } = useCrud(monstresApi);
-  const [showForm, setShowForm] = useState(false);
-  const [editing, setEditing] = useState<MonsterTemplate | null>(null);
+  const navigate = useNavigate();
+  const { items, loading, create, remove } = useCrud(monstresApi);
+  const [showCreate, setShowCreate] = useState(false);
   const [deleting, setDeleting] = useState<MonsterTemplate | null>(null);
   const [activeTab, setActiveTab] = useState<MonsterTab>('ennemis');
-  const [selectedMonster, setSelectedMonster] = useState<MonsterTemplate | null>(null);
-  const [allSorts, setAllSorts] = useState<Sort[]>([]);
-  const [addSortId, setAddSortId] = useState<number>(0);
-  const [addSortPrio, setAddSortPrio] = useState<number>(1);
-  const [allEquipment, setAllEquipment] = useState<Equipment[]>([]);
-  const [allResources, setAllResources] = useState<Ressource[]>([]);
-  const [dropType, setDropType] = useState<'ressource' | 'equipement'>('ressource');
-  const [dropTargetId, setDropTargetId] = useState<number>(0);
-  const [dropRate, setDropRate] = useState<number>(0.3);
-  const [dropMin, setDropMin] = useState<number>(1);
-  const [dropMax, setDropMax] = useState<number>(1);
-  const [allRegions, setAllRegions] = useState<Region[]>([]);
-  const [addRegionId, setAddRegionId] = useState<number>(0);
-  const [addRegionProba, setAddRegionProba] = useState<number>(0.5);
-
-  useEffect(() => {
-    Promise.all([sortsApi.getAll(), equipmentApi.getAll(), resourcesApi.getAll(), regionsApi.getAll()]).then(([s, e, r, reg]) => {
-      setAllSorts(s);
-      setAllEquipment(e);
-      setAllResources(r);
-      setAllRegions(reg);
-    });
-  }, []);
 
   const isInvocation = (m: MonsterTemplate) => m.xpRecompense === 0 || m.pvScalingInvocation !== null;
 
@@ -46,71 +101,34 @@ const MonstresPage: React.FC = () => {
     activeTab === 'ennemis' ? !isInvocation(m) : isInvocation(m)
   );
 
-  const selectMonster = async (id: number) => {
-    const detail = await monstresApi.getById(id);
-    setSelectedMonster(detail);
-  };
-
-  const handleAddSort = async () => {
-    if (!selectedMonster || !addSortId) return;
-    await monstresApi.addSort(selectedMonster.id, { sortId: addSortId, priorite: addSortPrio });
-    await selectMonster(selectedMonster.id);
-    refresh();
-  };
-
-  const handleRemoveSort = async (sortId: number) => {
-    if (!selectedMonster) return;
-    await monstresApi.removeSort(selectedMonster.id, sortId);
-    await selectMonster(selectedMonster.id);
-    refresh();
-  };
-
-  const handleAddDrop = async () => {
-    if (!selectedMonster || !dropTargetId) return;
-    const data: Record<string, unknown> = {
-      tauxDrop: dropRate,
-      quantiteMin: dropMin,
-      quantiteMax: dropMax,
+  const handleCreate = async (nom: string, isInvoc: boolean) => {
+    const payload: Partial<MonsterTemplate> & { pvScalingInvocation?: number | null } = {
+      nom,
+      force: 10, intelligence: 10, dexterite: 10, agilite: 10,
+      vie: 10, chance: 10, pvBase: 50, paBase: 6, pmBase: 3,
+      niveauBase: 1, xpRecompense: isInvoc ? 0 : 10,
+      orMin: 0, orMax: 0, iaType: 'EQUILIBRE' as IAType,
+      pvScalingInvocation: isInvoc ? 0.5 : null,
     };
-    if (dropType === 'ressource') data.ressourceId = dropTargetId;
-    else data.equipementId = dropTargetId;
-    await monstresApi.addDrop(selectedMonster.id, data as any);
-    await selectMonster(selectedMonster.id);
-    refresh();
-    setDropTargetId(0);
-  };
-
-  const handleRemoveDrop = async (dropId: number) => {
-    if (!selectedMonster) return;
-    await monstresApi.removeDrop(selectedMonster.id, dropId);
-    await selectMonster(selectedMonster.id);
-    refresh();
-  };
-
-  const handleAddRegion = async () => {
-    if (!selectedMonster || !addRegionId) return;
-    await regionsApi.addMonstre(addRegionId, { monstreId: selectedMonster.id, probabilite: addRegionProba });
-    await selectMonster(selectedMonster.id);
-    setAddRegionId(0);
-  };
-
-  const handleRemoveRegion = async (regionId: number) => {
-    if (!selectedMonster) return;
-    await regionsApi.removeMonstre(regionId, selectedMonster.id);
-    await selectMonster(selectedMonster.id);
+    const created = await create(payload);
+    setShowCreate(false);
+    navigate(`/admin/monstres/${created.id}`);
   };
 
   const columns: Column<MonsterTemplate>[] = [
     { key: 'id', header: 'ID' },
     { key: 'nom', header: 'Nom' },
-    { key: 'force', header: 'Force' },
-    { key: 'intelligence', header: 'Intel.' },
-    { key: 'agilite', header: 'Agilite' },
-    { key: 'vie', header: 'Vie' },
-    { key: 'pvBase', header: 'PV base' },
-    { key: 'niveauBase', header: 'Niveau' },
+    { key: 'force', header: 'FOR' },
+    { key: 'intelligence', header: 'INT' },
+    { key: 'agilite', header: 'AGI' },
+    { key: 'vie', header: 'VIE' },
+    { key: 'niveauBase', header: 'Niv.' },
     { key: 'xpRecompense', header: 'XP' },
-    { key: 'iaType', header: 'IA' },
+    {
+      key: 'iaType',
+      header: 'IA',
+      render: (item) => <span className="badge badge-muted">{item.iaType}</span>,
+    },
     ...(activeTab === 'invocations' ? [{
       key: 'pvScalingInvocation' as keyof MonsterTemplate,
       header: 'PV Scaling',
@@ -118,55 +136,23 @@ const MonstresPage: React.FC = () => {
     }] : []),
   ];
 
-  const fields: FieldDef[] = [
-    { name: 'nom', label: 'Nom', type: 'text', required: true },
-    { name: 'force', label: 'Force', type: 'number', required: true, min: 1, defaultValue: 10 },
-    { name: 'intelligence', label: 'Intelligence', type: 'number', required: true, min: 1, defaultValue: 10 },
-    { name: 'dexterite', label: 'Dexterite', type: 'number', required: true, min: 1, defaultValue: 10 },
-    { name: 'agilite', label: 'Agilite', type: 'number', required: true, min: 1, defaultValue: 10 },
-    { name: 'vie', label: 'Vie', type: 'number', required: true, min: 1, defaultValue: 10 },
-    { name: 'chance', label: 'Chance', type: 'number', required: true, min: 1, defaultValue: 10 },
-    { name: 'pvBase', label: 'PV base', type: 'number', required: true, min: 1, defaultValue: 50 },
-    { name: 'paBase', label: 'PA base', type: 'number', defaultValue: 6, min: 1 },
-    { name: 'pmBase', label: 'PM base', type: 'number', defaultValue: 3, min: 1 },
-    { name: 'niveauBase', label: 'Niveau base', type: 'number', defaultValue: 1, min: 1 },
-    { name: 'xpRecompense', label: 'XP recompense', type: 'number', defaultValue: 10, min: 0 },
-    { name: 'orMin', label: 'Or min', type: 'number', defaultValue: 0, min: 0 },
-    { name: 'orMax', label: 'Or max', type: 'number', defaultValue: 0, min: 0 },
-    {
-      name: 'iaType',
-      label: 'Type IA',
-      type: 'select',
-      options: [
-        { value: 'EQUILIBRE', label: 'Equilibre' },
-        { value: 'AGGRESSIF', label: 'Aggressif' },
-        { value: 'SOUTIEN', label: 'Soutien' },
-        { value: 'DISTANCE', label: 'Distance' },
-      ],
-      defaultValue: 'EQUILIBRE',
-    },
-    { name: 'pvScalingInvocation', label: 'PV scaling invocation', type: 'float', step: 0.01 },
-  ];
-
-  const tabs: { key: MonsterTab; label: string; count: number }[] = [
-    { key: 'ennemis', label: 'Ennemis', count: items.filter(m => !isInvocation(m)).length },
-    { key: 'invocations', label: 'Invocations', count: items.filter(m => isInvocation(m)).length },
+  const tabs = [
+    { key: 'ennemis' as MonsterTab, label: 'Ennemis', count: items.filter(m => !isInvocation(m)).length },
+    { key: 'invocations' as MonsterTab, label: 'Invocations', count: items.filter(m => isInvocation(m)).length },
   ];
 
   return (
     <div className="admin-page">
       <div className="page-header">
         <h1>Monstres</h1>
-        <button className="btn btn-primary" onClick={() => { setEditing(null); setShowForm(true); }}>
-          + Creer
-        </button>
+        <button className="btn btn-primary" onClick={() => setShowCreate(true)}>+ Créer</button>
       </div>
       <div className="tabs">
         {tabs.map(tab => (
           <button
             key={tab.key}
             className={`tab-btn ${activeTab === tab.key ? 'active' : ''}`}
-            onClick={() => { setActiveTab(tab.key); setSelectedMonster(null); }}
+            onClick={() => setActiveTab(tab.key)}
           >
             {tab.label} ({tab.count})
           </button>
@@ -176,196 +162,20 @@ const MonstresPage: React.FC = () => {
         columns={columns}
         data={filteredItems}
         loading={loading}
-        onEdit={item => { setEditing(item); setShowForm(true); }}
         onDelete={item => setDeleting(item)}
-        onRowClick={item => selectMonster(item.id)}
-        selectedId={selectedMonster?.id}
+        onRowClick={item => navigate(`/admin/monstres/${item.id}`)}
       />
 
-      {selectedMonster && (
-        <div className="detail-panel">
-          <h3>
-            {selectedMonster.nom}
-            <button className="btn btn-sm btn-secondary" onClick={() => setSelectedMonster(null)}>Fermer</button>
-          </h3>
-          <div className="detail-sections">
-            <div className="detail-section">
-              <h4>Stats</h4>
-              <div className="stat-grid">
-                {([
-                  ['Force', selectedMonster.force],
-                  ['Intelligence', selectedMonster.intelligence],
-                  ['Dexterite', selectedMonster.dexterite],
-                  ['Agilite', selectedMonster.agilite],
-                  ['Vie', selectedMonster.vie],
-                  ['Chance', selectedMonster.chance],
-                  ['PV base', selectedMonster.pvBase],
-                  ['PA', selectedMonster.paBase],
-                  ['PM', selectedMonster.pmBase],
-                  ['Niveau', selectedMonster.niveauBase],
-                ] as [string, number][]).map(([label, val]) => (
-                  <div key={label} className="stat-row">
-                    <span className="stat-label">{label}</span>
-                    <span className="stat-value">{val}</span>
-                  </div>
-                ))}
-              </div>
-              {selectedMonster.pvScalingInvocation !== null && (
-                <div className="stat-row" style={{ marginTop: 8 }}>
-                  <span className="stat-label">PV Scaling</span>
-                  <span className="stat-value">{selectedMonster.pvScalingInvocation}</span>
-                </div>
-              )}
-            </div>
-
-            <div className="detail-section">
-              <h4>Sorts ({selectedMonster.sorts?.length || 0})</h4>
-              <div className="sort-list">
-                {selectedMonster.sorts && selectedMonster.sorts.length > 0 ? (
-                  selectedMonster.sorts
-                    .sort((a, b) => a.priorite - b.priorite)
-                    .map(ms => (
-                      <div key={ms.id} className="sort-item">
-                        <div>
-                          <span className="sort-name">{ms.sort?.nom || `Sort #${ms.sortId}`}</span>
-                          {ms.sort && (
-                            <span className="sort-meta">
-                              <span>{ms.sort.coutPA} PA</span>
-                              <span>{ms.sort.degatsMin}-{ms.sort.degatsMax} dmg</span>
-                              <span>{ms.sort.porteeMin}-{ms.sort.porteeMax} po</span>
-                              {ms.sort.estSoin && <span style={{ color: 'var(--success)' }}>Soin</span>}
-                              {ms.sort.estDispel && <span style={{ color: 'var(--info)' }}>Dispel</span>}
-                              {ms.sort.estInvocation && <span style={{ color: 'var(--warning)' }}>Invoc.</span>}
-                            </span>
-                          )}
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span className="badge badge-info">P{ms.priorite}</span>
-                          <button className="btn btn-sm btn-danger" onClick={() => handleRemoveSort(ms.sortId)}>X</button>
-                        </div>
-                      </div>
-                    ))
-                ) : (
-                  <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Aucun sort</div>
-                )}
-              </div>
-              <div className="inline-add">
-                <select value={addSortId} onChange={e => setAddSortId(Number(e.target.value))}>
-                  <option value={0}>-- Sort --</option>
-                  {allSorts.map(s => (
-                    <option key={s.id} value={s.id}>{s.nom}</option>
-                  ))}
-                </select>
-                <input
-                  type="number"
-                  value={addSortPrio}
-                  onChange={e => setAddSortPrio(Number(e.target.value))}
-                  min={1}
-                  style={{ width: 60 }}
-                  placeholder="Prio"
-                />
-                <button className="btn btn-sm btn-success" onClick={handleAddSort} disabled={!addSortId}>+ Ajouter</button>
-              </div>
-            </div>
-
-            <div className="detail-section">
-              <h4>Drops ({selectedMonster.drops?.length || 0})</h4>
-              <div className="sort-list">
-                {selectedMonster.drops && selectedMonster.drops.length > 0 ? (
-                  selectedMonster.drops.map(d => (
-                    <div key={d.id} className="sort-item">
-                      <div>
-                        <span className="sort-name">
-                          {d.ressource ? d.ressource.nom : d.equipement ? d.equipement.nom : '?'}
-                        </span>
-                        <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--text-muted)' }}>
-                          {d.ressource ? 'Ressource' : 'Equipement'} | {Math.round(d.tauxDrop * 100)}% | x{d.quantiteMin}-{d.quantiteMax}
-                        </span>
-                      </div>
-                      <button className="btn btn-sm btn-danger" onClick={() => handleRemoveDrop(d.id)}>X</button>
-                    </div>
-                  ))
-                ) : (
-                  <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Aucun drop</div>
-                )}
-              </div>
-              <div className="inline-add" style={{ flexWrap: 'wrap' }}>
-                <select value={dropType} onChange={e => { setDropType(e.target.value as 'ressource' | 'equipement'); setDropTargetId(0); }}>
-                  <option value="ressource">Ressource</option>
-                  <option value="equipement">Equipement</option>
-                </select>
-                <select value={dropTargetId} onChange={e => setDropTargetId(Number(e.target.value))}>
-                  <option value={0}>-- Choisir --</option>
-                  {(dropType === 'ressource' ? allResources : allEquipment).map(item => (
-                    <option key={item.id} value={item.id}>{item.nom}</option>
-                  ))}
-                </select>
-                <input type="number" value={dropRate} onChange={e => setDropRate(Number(e.target.value))} step={0.05} min={0} max={1} style={{ width: 60 }} title="Taux" />
-                <input type="number" value={dropMin} onChange={e => setDropMin(Number(e.target.value))} min={1} style={{ width: 50 }} title="Min" />
-                <input type="number" value={dropMax} onChange={e => setDropMax(Number(e.target.value))} min={1} style={{ width: 50 }} title="Max" />
-                <button className="btn btn-sm btn-success" onClick={handleAddDrop} disabled={!dropTargetId}>+ Ajouter</button>
-              </div>
-            </div>
-
-            <div className="detail-section">
-              <h4>Regions ({selectedMonster.regions?.length || 0})</h4>
-              <div className="sort-list">
-                {selectedMonster.regions && selectedMonster.regions.length > 0 ? (
-                  selectedMonster.regions.map((r, i) => (
-                    <div key={i} className="sort-item">
-                      <div>
-                        <span className="sort-name">{r.region?.nom || `Region #${r.regionId}`}</span>
-                        <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--text-muted)' }}>
-                          Probabilite: {Math.round(r.probabilite * 100)}%
-                        </span>
-                      </div>
-                      <button className="btn btn-sm btn-danger" onClick={() => handleRemoveRegion(r.regionId)}>X</button>
-                    </div>
-                  ))
-                ) : (
-                  <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Aucune region</div>
-                )}
-              </div>
-              <div className="inline-add">
-                <select value={addRegionId} onChange={e => setAddRegionId(Number(e.target.value))}>
-                  <option value={0}>-- Region --</option>
-                  {allRegions.map(r => (
-                    <option key={r.id} value={r.id}>{r.nom} (Niv {r.niveauMin}-{r.niveauMax})</option>
-                  ))}
-                </select>
-                <input
-                  type="number"
-                  value={addRegionProba}
-                  onChange={e => setAddRegionProba(Number(e.target.value))}
-                  step={0.05}
-                  min={0}
-                  max={1}
-                  style={{ width: 60 }}
-                  title="Probabilite"
-                />
-                <button className="btn btn-sm btn-success" onClick={handleAddRegion} disabled={!addRegionId}>+ Ajouter</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <FormModal
-        open={showForm}
-        title={editing ? 'Modifier un monstre' : 'Creer un monstre'}
-        fields={fields}
-        initialValues={editing || undefined}
-        onSubmit={async (vals) => {
-          if (editing) await update(editing.id, vals);
-          else await create(vals);
-          setShowForm(false);
-        }}
-        onCancel={() => setShowForm(false)}
+      <CreateModal
+        open={showCreate}
+        onCancel={() => setShowCreate(false)}
+        onCreate={handleCreate}
       />
+
       <ConfirmDialog
         open={!!deleting}
         message={`Supprimer "${deleting?.nom}" ?`}
-        onConfirm={async () => { if (deleting) await remove(deleting.id); setDeleting(null); }}
+        onConfirm={async () => { if (deleting) { await remove(deleting.id); setDeleting(null); } }}
         onCancel={() => setDeleting(null)}
       />
     </div>

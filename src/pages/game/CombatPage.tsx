@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { combatApi } from '../../api/combat';
 import { zonesApi } from '../../api/static';
-import type { CombatState, CombatEntity, CombatCase, Sort, EffetActif, ZoneType, Zone, CombatLogEntry } from '../../types';
+import type { CombatState, CombatEntity, CombatCase, Sort, EffetActif, ZoneType, Zone, CombatLogEntry, ZonePoseeState } from '../../types';
 import {
   getReachableCells,
   getCellsInRange,
@@ -174,6 +174,27 @@ const CombatPage: React.FC = () => {
   combat.cases.forEach(c => obstacleMap.set(`${c.x},${c.y}`, c));
   const entityMap = new Map<string, CombatEntity>();
   combat.entites.filter(e => e.pvActuels > 0).forEach(e => entityMap.set(`${e.position.x},${e.position.y}`, e));
+
+  // Precompute zone cell maps (glyphes + pièges visibles)
+  const glypheCellMap = new Map<string, ZonePoseeState>();
+  const piegeCellMap = new Map<string, ZonePoseeState>();
+  if (combat.zonesActives) {
+    for (const z of combat.zonesActives) {
+      const cells = getAffectedCells(
+        { x: z.x, y: z.y },
+        { type: z.zoneType, taille: z.zoneTaille },
+        combat.grille.largeur,
+        combat.grille.hauteur
+      );
+      for (const cellKey of cells) {
+        if (!z.estPiege) {
+          if (!glypheCellMap.has(cellKey)) glypheCellMap.set(cellKey, z);
+        } else if (z.poseurEquipe === monEquipe) {
+          if (!piegeCellMap.has(cellKey)) piegeCellMap.set(cellKey, z);
+        }
+      }
+    }
+  }
 
   // Equipe du joueur (toujours 0)
   const monEquipe = 0;
@@ -703,9 +724,9 @@ const CombatPage: React.FC = () => {
                 const inAoe = aoeCells.has(cellKey);
                 const isHovered = hoveredCell?.x === x && hoveredCell?.y === y;
 
-                // Zones posées (glyphes et pièges)
-                const glyphe = combat.zonesActives?.find(z => z.x === x && z.y === y && !z.estPiege);
-                const piege = combat.zonesActives?.find(z => z.x === x && z.y === y && z.estPiege && z.poseurEquipe === monEquipe);
+                // Zones posées (glyphes et pièges) — couvre toute la zone AoE
+                const glyphe = glypheCellMap.get(cellKey);
+                const piege = piegeCellMap.get(cellKey);
 
                 let cellClass = 'combat-cell';
                 if (obstacle) cellClass += ' obstacle';

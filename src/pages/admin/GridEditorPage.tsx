@@ -1,42 +1,59 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { grillesApi } from '../../api/donjons';
-import type { GrilleCombat } from '../../types';
+import { mapsApi } from '../../api/maps';
+import type { GameMap, MapConnection } from '../../types';
+
+const GRID_WIDTH = 16;
+const GRID_HEIGHT = 18;
 
 type CellData =
   | { type: 'spawn-player'; ordre: number }
   | { type: 'spawn-enemy'; ordre: number }
   | { type: 'obstacle-pm' }
-  | { type: 'obstacle-los' };
+  | { type: 'obstacle-los' }
+  | { type: 'excluded' };
 
-type Tool = 'spawn-player' | 'spawn-enemy' | 'obstacle-pm' | 'obstacle-los' | 'eraser';
+type Tool = 'spawn-player' | 'spawn-enemy' | 'obstacle-pm' | 'obstacle-los' | 'excluded' | 'portal' | 'eraser';
+
+type PortalData = { toMapId: number; nom: string };
 
 const GridEditorPage: React.FC = () => {
-  const { id } = useParams<{ id: string }>();
+  const { mapId } = useParams<{ mapId: string }>();
   const navigate = useNavigate();
-  const [grille, setGrille] = useState<GrilleCombat | null>(null);
   const [cells, setCells] = useState<Map<string, CellData>>(new Map());
+  const [portals, setPortals] = useState<Map<string, PortalData>>(new Map());
+  const [allMaps, setAllMaps] = useState<GameMap[]>([]);
+  const [originalConnections, setOriginalConnections] = useState<MapConnection[]>([]);
+  const [portalToMapId, setPortalToMapId] = useState<number | ''>('');
+  const [portalNom, setPortalNom] = useState('');
   const [tool, setTool] = useState<Tool>('spawn-player');
   const [painting, setPainting] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!id) return;
-    grillesApi.getById(Number(id)).then((g) => {
-      setGrille(g);
+    if (!mapId) return;
+    setLoading(true);
+    Promise.all([
+      mapsApi.getGrid(Number(mapId)),
+      mapsApi.getById(Number(mapId)),
+      mapsApi.getAll(),
+    ]).then(([grid, mapInfo, maps]) => {
       const initial = new Map<string, CellData>();
-      if (g.cases) {
-        for (const c of g.cases) {
-          if (c.bloqueLigneDeVue) {
+      if (grid.cases) {
+        for (const c of grid.cases) {
+          if (c.estExclue) {
+            initial.set(`${c.x},${c.y}`, { type: 'excluded' });
+          } else if (c.bloqueLigneDeVue) {
             initial.set(`${c.x},${c.y}`, { type: 'obstacle-los' });
           } else {
             initial.set(`${c.x},${c.y}`, { type: 'obstacle-pm' });
           }
         }
       }
-      if (g.spawns) {
-        for (const s of g.spawns) {
+      if (grid.spawns) {
+        for (const s of grid.spawns) {
           initial.set(`${s.x},${s.y}`, {
             type: s.equipe === 0 ? 'spawn-player' : 'spawn-enemy',
             ordre: s.ordre,
@@ -44,8 +61,24 @@ const GridEditorPage: React.FC = () => {
         }
       }
       setCells(initial);
-    });
-  }, [id]);
+
+      // Charger les portails existants (hors donjons)
+      const nonDungeonConns = (mapInfo.connectionsFrom ?? []).filter(c => !c.donjonId);
+      setOriginalConnections(nonDungeonConns);
+      const initialPortals = new Map<string, PortalData>();
+      for (const conn of nonDungeonConns) {
+        initialPortals.set(`${conn.positionX},${conn.positionY}`, {
+          toMapId: conn.toMapId,
+          nom: conn.nom,
+        });
+      }
+      setPortals(initialPortals);
+
+      // Toutes les maps sauf la courante
+      setAllMaps(maps.filter(m => m.id !== Number(mapId)));
+    }).catch(() => setError('Impossible de charger la grille'))
+      .finally(() => setLoading(false));
+  }, [mapId]);
 
   const countSpawns = useCallback((type: 'spawn-player' | 'spawn-enemy') => {
     let count = 0;
@@ -55,23 +88,54 @@ const GridEditorPage: React.FC = () => {
     return count;
   }, [cells]);
 
-  const nextOrdre = useCallback((type: 'spawn-player' | 'spawn-enemy') => {
-    let max = 0;
-    for (const v of cells.values()) {
-      if (v.type === type && v.ordre > max) max = v.ordre;
-    }
-    return max + 1;
-  }, [cells]);
-
   const applyTool = useCallback((x: number, y: number) => {
+    const key = `${x},${y}`;
+
+    if (tool === 'eraser') {
+      // Supprimer des portails si présent
+      setPortals(prev => {
+        if (!prev.has(key)) return prev;
+        const next = new Map(prev);
+        next.delete(key);
+        return next;
+      });
+      // Supprimer des cases + renuméroter spawns
+      setCells(prev => {
+        const next = new Map(prev);
+        const deleted = next.get(key);
+        next.delete(key);
+        if (deleted && (deleted.type === 'spawn-player' || deleted.type === 'spawn-enemy')) {
+          const spawnType = deleted.type;
+          const spawns: { key: string; data: CellData & { type: typeof spawnType; ordre: number } }[] = [];
+          for (const [k, v] of next.entries()) {
+            if (v.type === spawnType) spawns.push({ key: k, data: v as any });
+          }
+          spawns.sort((a, b) => a.data.ordre - b.data.ordre);
+          spawns.forEach((s, i) => {
+            next.set(s.key, { type: spawnType, ordre: i + 1 });
+          });
+        }
+        return next;
+      });
+      return;
+    }
+
+    if (tool === 'portal') {
+      if (!portalToMapId || !portalNom.trim()) return;
+      setPortals(prev => {
+        const next = new Map(prev);
+        next.set(key, { toMapId: Number(portalToMapId), nom: portalNom.trim() });
+        return next;
+      });
+      return;
+    }
+
     setCells(prev => {
       const next = new Map(prev);
-      const key = `${x},${y}`;
 
       if (tool === 'eraser') {
         const deleted = next.get(key);
         next.delete(key);
-        // Re-number spawns after deletion to avoid gaps (1,2,4,5 → 1,2,3,4)
         if (deleted && (deleted.type === 'spawn-player' || deleted.type === 'spawn-enemy')) {
           const spawnType = deleted.type;
           const spawns: { key: string; data: CellData & { type: typeof spawnType; ordre: number } }[] = [];
@@ -86,11 +150,10 @@ const GridEditorPage: React.FC = () => {
         return next;
       }
 
-      // Don't overwrite existing cell when dragging (except eraser)
-      if (prev.has(key) && tool !== 'eraser') return prev;
+      // Don't overwrite existing cell when dragging
+      if (prev.has(key)) return prev;
 
       if (tool === 'spawn-player' || tool === 'spawn-enemy') {
-        // Count current spawns of this type
         let count = 0;
         for (const v of prev.values()) {
           if (v.type === tool) count++;
@@ -101,11 +164,13 @@ const GridEditorPage: React.FC = () => {
         next.set(key, { type: 'obstacle-pm' });
       } else if (tool === 'obstacle-los') {
         next.set(key, { type: 'obstacle-los' });
+      } else if (tool === 'excluded') {
+        next.set(key, { type: 'excluded' });
       }
 
       return next;
     });
-  }, [tool]);
+  }, [tool, portalToMapId, portalNom]);
 
   const handleMouseDown = (x: number, y: number) => {
     setPainting(true);
@@ -129,11 +194,11 @@ const GridEditorPage: React.FC = () => {
   const canSave = playerCount === 8 && enemyCount === 8;
 
   const handleSave = async () => {
-    if (!grille || !canSave) return;
+    if (!mapId || !canSave) return;
     setSaving(true);
     setError('');
     try {
-      const obstacles: { x: number; y: number; bloqueDeplacement: boolean; bloqueLigneDeVue: boolean }[] = [];
+      const obstacles: { x: number; y: number; bloqueDeplacement: boolean; bloqueLigneDeVue: boolean; estExclue: boolean }[] = [];
       const spawns: { x: number; y: number; equipe: number; ordre: number }[] = [];
 
       for (const [key, data] of cells.entries()) {
@@ -142,9 +207,11 @@ const GridEditorPage: React.FC = () => {
         const y = Number(yStr);
 
         if (data.type === 'obstacle-pm') {
-          obstacles.push({ x, y, bloqueDeplacement: true, bloqueLigneDeVue: false });
+          obstacles.push({ x, y, bloqueDeplacement: true, bloqueLigneDeVue: false, estExclue: false });
         } else if (data.type === 'obstacle-los') {
-          obstacles.push({ x, y, bloqueDeplacement: true, bloqueLigneDeVue: true });
+          obstacles.push({ x, y, bloqueDeplacement: true, bloqueLigneDeVue: true, estExclue: false });
+        } else if (data.type === 'excluded') {
+          obstacles.push({ x, y, bloqueDeplacement: true, bloqueLigneDeVue: true, estExclue: true });
         } else if (data.type === 'spawn-player') {
           spawns.push({ x, y, equipe: 0, ordre: data.ordre });
         } else if (data.type === 'spawn-enemy') {
@@ -152,9 +219,22 @@ const GridEditorPage: React.FC = () => {
         }
       }
 
-      await grillesApi.setCases(grille.id, obstacles);
-      await grillesApi.setSpawns(grille.id, spawns);
-      navigate('/admin/grilles');
+      await mapsApi.setCases(Number(mapId), obstacles);
+      await mapsApi.setSpawns(Number(mapId), spawns);
+
+      // Sauvegarder les portails : supprimer les anciennes connexions non-donjon, créer les nouvelles
+      await Promise.all(originalConnections.map(conn => mapsApi.removeConnection(Number(mapId), conn.id)));
+      await Promise.all([...portals.entries()].map(([key, data]) => {
+        const [xStr, yStr] = key.split(',');
+        return mapsApi.addConnection(Number(mapId), {
+          toMapId: data.toMapId,
+          positionX: Number(xStr),
+          positionY: Number(yStr),
+          nom: data.nom,
+        });
+      }));
+
+      navigate('/admin/monde');
     } catch (e: any) {
       setError(e?.response?.data?.error || 'Erreur lors de la sauvegarde');
     } finally {
@@ -169,6 +249,7 @@ const GridEditorPage: React.FC = () => {
       case 'spawn-enemy': return 'spawn-enemy';
       case 'obstacle-pm': return 'obstacle-cell';
       case 'obstacle-los': return 'obstacle-cell obstacle-los';
+      case 'excluded': return 'excluded-cell';
       default: return '';
     }
   };
@@ -180,21 +261,23 @@ const GridEditorPage: React.FC = () => {
     return '';
   };
 
-  if (!grille) return <div className="admin-page"><p>Chargement...</p></div>;
+  if (loading) return <div className="admin-page"><p>Chargement...</p></div>;
 
   const tools: { key: Tool; label: string; info?: string }[] = [
     { key: 'spawn-player', label: 'Spawn Joueur', info: `${playerCount}/8` },
     { key: 'spawn-enemy', label: 'Spawn Ennemi', info: `${enemyCount}/8` },
     { key: 'obstacle-pm', label: 'Obstacle PM' },
     { key: 'obstacle-los', label: 'Obstacle LDV' },
+    { key: 'excluded', label: 'Zone exclue' },
+    { key: 'portal', label: `Portail${portals.size > 0 ? ` (${portals.size})` : ''}` },
     { key: 'eraser', label: 'Gomme' },
   ];
 
   return (
     <div className="admin-page">
       <div className="save-bar">
-        <button className="btn" onClick={() => navigate('/admin/grilles')}>← Retour</button>
-        <span className="save-bar-title">{grille.nom} ({grille.largeur}x{grille.hauteur})</span>
+        <button className="btn" onClick={() => navigate('/admin/monde')}>← Retour</button>
+        <span className="save-bar-title">Grille de combat — Map #{mapId} ({GRID_WIDTH}×{GRID_HEIGHT})</span>
         <button className="btn btn-primary" onClick={handleSave} disabled={!canSave || saving}>
           {saving ? 'Sauvegarde...' : 'Sauvegarder'}
         </button>
@@ -212,28 +295,74 @@ const GridEditorPage: React.FC = () => {
             </button>
           ))}
         </div>
+
+        {tool === 'portal' && (
+          <div className="portal-config">
+            <label>Destination :</label>
+            <select
+              value={portalToMapId}
+              onChange={e => setPortalToMapId(e.target.value ? Number(e.target.value) : '')}
+            >
+              <option value="">— choisir —</option>
+              {allMaps.map(m => (
+                <option key={m.id} value={m.id}>{m.nom}</option>
+              ))}
+            </select>
+            <label>Nom :</label>
+            <input
+              value={portalNom}
+              onChange={e => setPortalNom(e.target.value)}
+              placeholder="ex: Chemin vers..."
+            />
+            {(!portalToMapId || !portalNom.trim()) && (
+              <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>
+                Choisissez une destination et un nom avant de cliquer sur une case
+              </span>
+            )}
+          </div>
+        )}
+
         <div
           className="grid-canvas"
-          style={{ gridTemplateColumns: `repeat(${grille.largeur}, 32px)` }}
+          style={{ gridTemplateColumns: `repeat(${GRID_WIDTH}, 32px)` }}
           onMouseLeave={() => setPainting(false)}
         >
-          {Array.from({ length: grille.hauteur }).map((_, y) =>
-            Array.from({ length: grille.largeur }).map((_, x) => {
-              const cell = cells.get(`${x},${y}`);
+          {Array.from({ length: GRID_HEIGHT }).map((_, y) =>
+            Array.from({ length: GRID_WIDTH }).map((_, x) => {
+              const key = `${x},${y}`;
+              const cell = cells.get(key);
+              const portal = portals.get(key);
+              let className = `grid-cell ${getCellClass(cell)}`;
+              if (portal) className += ' portal-cell';
               return (
                 <div
-                  key={`${x},${y}`}
-                  className={`grid-cell ${getCellClass(cell)}`}
+                  key={key}
+                  className={className}
                   onMouseDown={(e) => { e.preventDefault(); handleMouseDown(x, y); }}
                   onMouseEnter={() => handleMouseEnter(x, y)}
                   onMouseUp={handleMouseUp}
+                  title={portal ? `Portail → ${allMaps.find(m => m.id === portal.toMapId)?.nom ?? `Map #${portal.toMapId}`}: ${portal.nom}` : undefined}
                 >
-                  {getCellLabel(cell)}
+                  {portal ? '\uD83D\uDEAA' : getCellLabel(cell)}
                 </div>
               );
             })
           )}
         </div>
+
+        {portals.size > 0 && (
+          <div className="portal-list">
+            <strong>Portails ({portals.size}) :</strong>
+            {[...portals.entries()].map(([key, data]) => {
+              const dest = allMaps.find(m => m.id === data.toMapId);
+              return (
+                <span key={key} className="portal-tag">
+                  ({key}) → {dest?.nom ?? `Map #${data.toMapId}`} — {data.nom}
+                </span>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

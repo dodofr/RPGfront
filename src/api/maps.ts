@@ -1,5 +1,5 @@
 import api from './client';
-import type { Region, GameMap, MonsterTemplate, MonstreDrop } from '../types';
+import type { Region, GameMap, MonsterTemplate, MonstreDrop, MapCase, MapSpawn } from '../types';
 
 export const regionsApi = {
   getAll: () => api.get<Region[]>('/regions').then(r => r.data),
@@ -27,7 +27,11 @@ export const mapsApi = {
   engage: (mapId: number, data: { groupeId: number; groupeEnnemiId: number }) =>
     api.post(`/maps/${mapId}/engage`, data).then(r => r.data),
   respawn: (mapId: number) => api.post(`/maps/${mapId}/respawn`).then(r => r.data),
-  getGrilles: (mapId: number) => api.get<import('../types').GrilleCombat[]>(`/maps/${mapId}/grilles`).then(r => r.data),
+  getGrid: (mapId: number) => api.get<{ cases: MapCase[]; spawns: MapSpawn[] }>(`/maps/${mapId}/grid`).then(r => r.data),
+  setCases: (mapId: number, cases: { x: number; y: number; bloqueDeplacement: boolean; bloqueLigneDeVue: boolean; estExclue: boolean }[]) =>
+    api.put(`/maps/${mapId}/grid/cases`, { cases }).then(r => r.data),
+  setSpawns: (mapId: number, spawns: { x: number; y: number; equipe: number; ordre: number }[]) =>
+    api.put(`/maps/${mapId}/grid/spawns`, { spawns }).then(r => r.data),
   updateWorldPositions: (positions: { mapId: number; worldX: number; worldY: number }[]) =>
     api.put<GameMap[]>('/maps/world-positions', { positions }).then(r => r.data),
 };

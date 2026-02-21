@@ -12,6 +12,11 @@ import CombatAdminPage from './pages/admin/CombatAdminPage'
 import ObjetsPage from './pages/admin/ObjetsPage'
 import GridEditorPage from './pages/admin/GridEditorPage'
 
+// Admin detail pages
+import MonstreDetailPage from './pages/admin/MonstreDetailPage'
+import SortDetailPage from './pages/admin/SortDetailPage'
+import EquipementDetailPage from './pages/admin/EquipementDetailPage'
+
 // Game pages
 import PlayersPage from './pages/game/PlayersPage'
 import DashboardPage from './pages/game/DashboardPage'
@@ -42,7 +47,11 @@ const router = createBrowserRouter([
       { path: 'entites', element: <EntitesPage /> },
       { path: 'combat', element: <CombatAdminPage /> },
       { path: 'objets', element: <ObjetsPage /> },
-      { path: 'grilles/:id/edit', element: <GridEditorPage /> },
+      { path: 'maps/:mapId/grid', element: <GridEditorPage /> },
+      // Pages dédiées
+      { path: 'monstres/:id', element: <MonstreDetailPage /> },
+      { path: 'sorts/:id', element: <SortDetailPage /> },
+      { path: 'equipements/:id', element: <EquipementDetailPage /> },
     ],
   },
 ])

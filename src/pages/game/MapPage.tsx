@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { groupsApi } from '../../api/groups';
 import { mapsApi } from '../../api/maps';
-import type { Group, GameMap, Direction, MapConnection, GroupeEnnemi } from '../../types';
+import type { Group, GameMap, Direction, MapConnection, GroupeEnnemi, MapCase } from '../../types';
 import '../../styles/index.css';
 
 const CELL_SIZE = 40;
@@ -83,6 +83,7 @@ const MapPage: React.FC = () => {
 
   const [group, setGroup] = useState<Group | null>(null);
   const [mapData, setMapData] = useState<GameMap | null>(null);
+  const [mapCases, setMapCases] = useState<MapCase[]>([]);
   const [allMaps, setAllMaps] = useState<GameMap[]>([]);
   const [loading, setLoading] = useState(true);
   const [enterMapId, setEnterMapId] = useState<number | null>(null);
@@ -102,10 +103,15 @@ const MapPage: React.FC = () => {
     const g = await groupsApi.getById(gId);
     setGroup(g);
     if (g.mapId) {
-      const map = await mapsApi.getById(g.mapId);
+      const [map, grid] = await Promise.all([
+        mapsApi.getById(g.mapId),
+        mapsApi.getGrid(g.mapId),
+      ]);
       setMapData(map);
+      setMapCases(grid.cases ?? []);
     } else {
       setMapData(null);
+      setMapCases([]);
     }
   }, []);
 
@@ -135,6 +141,15 @@ const MapPage: React.FC = () => {
     }
     return map;
   }, [mapData]);
+
+  // Lookup O(1) pour les cases bloquées (obstacles + zones exclues)
+  const blockedAt = useMemo(() => {
+    const set = new Set<string>();
+    for (const c of mapCases) {
+      if (c.bloqueDeplacement || c.estExclue) set.add(`${c.x},${c.y}`);
+    }
+    return set;
+  }, [mapCases]);
 
   const handleCellClick = async (x: number, y: number) => {
     if (!group || !mapData || moving) return;
@@ -422,7 +437,9 @@ const MapPage: React.FC = () => {
                 const conn = connectionAt.get(`${x},${y}`);
                 const isPlayerHere = x === group.positionX && y === group.positionY;
 
+                const isBlocked = blockedAt.has(`${x},${y}`);
                 let className = 'adventure-cell';
+                if (isBlocked) className += ' cell-obstacle';
                 if (isPlayerHere) className += ' cell-player';
                 else if (cellType === 'enemy') className += ' cell-enemy';
                 else if (cellType === 'connection') className += ' cell-connection';

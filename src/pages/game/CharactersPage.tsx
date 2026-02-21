@@ -62,6 +62,12 @@ const CharactersPage: React.FC<CharactersPageProps> = ({ playerId: playerIdProp 
   const [mapType, setMapType] = useState<MapType | null>(null);
   const [craftingId, setCraftingId] = useState<number | null>(null);
   const [craftMessage, setCraftMessage] = useState<string | null>(null);
+  const [deleteResourceModal, setDeleteResourceModal] = useState<{
+    ressourceId: number;
+    nom: string;
+    quantiteMax: number;
+    quantite: number;
+  } | null>(null);
 
   const refresh = async () => {
     setLoading(true);
@@ -514,7 +520,12 @@ const CharactersPage: React.FC<CharactersPageProps> = ({ playerId: playerIdProp 
                             x{res.quantite} ({res.poids * res.quantite}kg)
                           </span>
                         </div>
-                        <button className="btn btn-sm btn-danger" onClick={() => handleDestroyResource(res.ressourceId, res.quantite)}>Suppr.</button>
+                        <button className="btn btn-sm btn-danger" onClick={() => setDeleteResourceModal({
+                          ressourceId: res.ressourceId,
+                          nom: res.nom,
+                          quantiteMax: res.quantite,
+                          quantite: res.quantite,
+                        })}>Suppr.</button>
                       </div>
                     ))}
                   </div>
@@ -615,6 +626,40 @@ const CharactersPage: React.FC<CharactersPageProps> = ({ playerId: playerIdProp 
               </div>
             </>
           )}
+        </div>
+      )}
+
+      {/* Delete resource modal */}
+      {deleteResourceModal && (
+        <div className="modal-overlay" onClick={() => setDeleteResourceModal(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Supprimer {deleteResourceModal.nom}</h3>
+              <button className="modal-close" onClick={() => setDeleteResourceModal(null)}>X</button>
+            </div>
+            <div className="modal-body">
+              <p style={{ marginBottom: 8 }}>Quantite disponible : {deleteResourceModal.quantiteMax}</p>
+              <label>Quantite a supprimer</label>
+              <input
+                type="number"
+                min={1}
+                max={deleteResourceModal.quantiteMax}
+                value={deleteResourceModal.quantite}
+                onChange={e => setDeleteResourceModal({
+                  ...deleteResourceModal,
+                  quantite: Math.min(deleteResourceModal.quantiteMax, Math.max(1, parseInt(e.target.value) || 1)),
+                })}
+                style={{ width: '100%', marginTop: 4 }}
+              />
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setDeleteResourceModal(null)}>Annuler</button>
+              <button className="btn btn-danger" onClick={async () => {
+                await handleDestroyResource(deleteResourceModal.ressourceId, deleteResourceModal.quantite);
+                setDeleteResourceModal(null);
+              }}>Supprimer</button>
+            </div>
+          </div>
         </div>
       )}
 

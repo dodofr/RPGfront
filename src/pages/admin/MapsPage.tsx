@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import DataTable, { type Column } from '../../components/DataTable';
 import FormModal, { type FieldDef } from '../../components/FormModal';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { useCrud } from '../../hooks/useCrud';
 import { mapsApi, regionsApi } from '../../api/maps';
-import { grillesApi } from '../../api/donjons';
-import type { GameMap, Region, GrilleCombat } from '../../types';
+import type { GameMap, Region } from '../../types';
 
 const MapsPage: React.FC = () => {
   const { items, loading, create, update, remove } = useCrud(mapsApi);
@@ -13,30 +13,11 @@ const MapsPage: React.FC = () => {
   const [editing, setEditing] = useState<GameMap | null>(null);
   const [deleting, setDeleting] = useState<GameMap | null>(null);
   const [regions, setRegions] = useState<Region[]>([]);
-  const [expandedMapId, setExpandedMapId] = useState<number | null>(null);
-  const [mapGrilles, setMapGrilles] = useState<GrilleCombat[]>([]);
-  const [loadingGrilles, setLoadingGrilles] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     regionsApi.getAll().then(setRegions);
   }, []);
-
-  const toggleGrilles = async (mapId: number) => {
-    if (expandedMapId === mapId) {
-      setExpandedMapId(null);
-      setMapGrilles([]);
-      return;
-    }
-    setExpandedMapId(mapId);
-    setLoadingGrilles(true);
-    try {
-      const grilles = await mapsApi.getGrilles(mapId);
-      setMapGrilles(grilles);
-    } catch {
-      setMapGrilles([]);
-    }
-    setLoadingGrilles(false);
-  };
 
   const columns: Column<GameMap>[] = [
     { key: 'id', header: 'ID' },
@@ -59,19 +40,16 @@ const MapsPage: React.FC = () => {
         : <span style={{ color: 'var(--text-muted)' }}>—</span>,
     },
     {
-      key: 'grilles',
-      header: 'Grilles',
-      render: (item) => {
-        const count = item._count?.grilles ?? 0;
-        return (
-          <button
-            className="btn btn-sm"
-            onClick={(e) => { e.stopPropagation(); toggleGrilles(item.id); }}
-          >
-            {count} grille{count !== 1 ? 's' : ''} {expandedMapId === item.id ? '▲' : '▼'}
-          </button>
-        );
-      },
+      key: 'id' as any,
+      header: 'Grille',
+      render: (item) => (
+        <button
+          className="btn btn-sm"
+          onClick={(e) => { e.stopPropagation(); navigate(`/admin/maps/${item.id}/grid`); }}
+        >
+          Éditer grille
+        </button>
+      ),
     },
   ];
 
@@ -110,8 +88,8 @@ const MapsPage: React.FC = () => {
       ],
       defaultValue: 'MANUEL',
     },
-    { name: 'largeur', label: 'Largeur', type: 'number', required: true, min: 5, defaultValue: 20 },
-    { name: 'hauteur', label: 'Hauteur', type: 'number', required: true, min: 5, defaultValue: 20 },
+    { name: 'largeur', label: 'Largeur', type: 'number', required: true, min: 5, defaultValue: 16 },
+    { name: 'hauteur', label: 'Hauteur', type: 'number', required: true, min: 5, defaultValue: 18 },
     { name: 'tauxRencontre', label: 'Taux rencontre', type: 'float', defaultValue: 0.2, step: 0.01 },
     ...(!editing?.worldX && !editing?.worldY ? [
       { name: 'nordMapId', label: 'Map Nord', type: 'select' as const, options: allMapsOptions },
@@ -120,15 +98,6 @@ const MapsPage: React.FC = () => {
       { name: 'ouestMapId', label: 'Map Ouest', type: 'select' as const, options: allMapsOptions },
     ] : []),
   ];
-
-  const handleDeleteGrille = async (grilleId: number) => {
-    if (!confirm('Supprimer cette grille ?')) return;
-    await grillesApi.remove(grilleId);
-    if (expandedMapId) {
-      const grilles = await mapsApi.getGrilles(expandedMapId);
-      setMapGrilles(grilles);
-    }
-  };
 
   return (
     <div className="admin-page">
@@ -145,30 +114,6 @@ const MapsPage: React.FC = () => {
         onEdit={item => { setEditing(item); setShowForm(true); }}
         onDelete={item => setDeleting(item)}
       />
-      {expandedMapId && (
-        <div className="relation-section">
-          <h4>Grilles de combat - {items.find(m => m.id === expandedMapId)?.nom}</h4>
-          {loadingGrilles ? (
-            <div className="loading">Chargement...</div>
-          ) : mapGrilles.length === 0 ? (
-            <p style={{ fontSize: 13, color: '#aaa' }}>Aucune grille liee a cette map.</p>
-          ) : (
-            <div className="relation-list">
-              {mapGrilles.map(g => (
-                <div key={g.id} className="relation-item">
-                  <span>
-                    <strong>{g.nom}</strong> ({g.largeur}x{g.hauteur})
-                    {' '}- {g.cases?.length ?? 0} obstacles, {g.spawns?.length ?? 0} spawns
-                  </span>
-                  <button className="btn btn-sm btn-danger" onClick={() => handleDeleteGrille(g.id)}>
-                    Supprimer
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
       <FormModal
         open={showForm}
         title={editing ? 'Modifier une map' : 'Creer une map'}

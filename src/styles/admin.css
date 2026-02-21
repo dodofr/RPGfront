@@ -77,6 +77,66 @@
   background: #775;
 }
 
+.grid-editor .grid-cell.excluded-cell {
+  background: #111;
+  border-color: #222;
+}
+
+.grid-editor .grid-cell.portal-cell {
+  background: rgba(100, 149, 237, 0.35);
+  border-color: #6495ed;
+  font-size: 14px;
+}
+
+.portal-config {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--bg-light);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.portal-config label {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.portal-config select,
+.portal-config input {
+  padding: 4px 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.portal-config input {
+  width: 200px;
+}
+
+.portal-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  padding: 6px 0;
+  font-size: 12px;
+}
+
+.portal-tag {
+  background: rgba(100, 149, 237, 0.2);
+  border: 1px solid #6495ed;
+  border-radius: 4px;
+  padding: 2px 8px;
+  color: var(--text);
+}
+
 .save-bar {
   display: flex;
   align-items: center;
@@ -585,6 +645,141 @@
   gap: 8px;
   padding: 16px 20px;
   border-top: 1px solid var(--border);
+}
+
+/* ===== Detail pages (monstre / sort / equipement) ===== */
+
+.detail-page-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0 16px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.detail-page-title {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.detail-page-name-input {
+  font-size: 20px;
+  font-weight: 700;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid var(--border);
+  color: var(--text);
+  padding: 2px 4px;
+  outline: none;
+  min-width: 180px;
+  max-width: 340px;
+  transition: border-color 0.15s;
+}
+
+.detail-page-name-input:focus {
+  border-bottom-color: var(--primary);
+}
+
+.detail-page-body {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.detail-page-section {
+  background: var(--bg-light);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.detail-page-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.detail-page-section-header h3 {
+  font-size: 14px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+  margin: 0;
+}
+
+.detail-page-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.detail-page-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.detail-page-field label {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.detail-page-field input,
+.detail-page-field select {
+  padding: 5px 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 13px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.detail-page-field input:focus,
+.detail-page-field select:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.detail-page-flags {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.detail-page-flag-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.badge-secondary {
+  background: rgba(255,255,255,0.1);
+  color: var(--text-muted);
+}
+
+.badge-warning {
+  background: rgba(255, 152, 0, 0.25);
+  color: var(--warning);
+}
+
+.badge-danger {
+  background: rgba(233, 69, 96, 0.25);
+  color: var(--danger);
 }
 
 /* World Map Editor */

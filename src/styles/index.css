@@ -612,6 +612,12 @@ body {
 }
 
 /* Cell types */
+.cell-obstacle {
+  background: #1a1a1a !important;
+  border-color: #333 !important;
+  cursor: not-allowed;
+}
+
 .cell-player {
   background: rgba(76, 175, 80, 0.25) !important;
   border-color: var(--success) !important;

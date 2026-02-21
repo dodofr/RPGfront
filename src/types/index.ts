@@ -178,6 +178,25 @@ export interface Region {
   monstres?: RegionMonstre[];
 }
 
+export interface MapCase {
+  id: number;
+  mapId: number;
+  x: number;
+  y: number;
+  bloqueDeplacement: boolean;
+  bloqueLigneDeVue: boolean;
+  estExclue: boolean;
+}
+
+export interface MapSpawn {
+  id: number;
+  mapId: number;
+  x: number;
+  y: number;
+  equipe: number;
+  ordre: number;
+}
+
 export interface GameMap {
   id: number;
   nom: string;
@@ -196,8 +215,8 @@ export interface GameMap {
   worldY: number | null;
   groupesEnnemis?: GroupeEnnemi[];
   connectionsFrom?: MapConnection[];
-  grilles?: { id: number; nom: string; largeur: number; hauteur: number; _count: { cases: number; spawns: number } }[];
-  _count?: { grilles: number };
+  cases?: MapCase[];
+  spawns?: MapSpawn[];
 }
 
 export interface MapConnection {
@@ -388,6 +407,8 @@ export interface ZonePoseeState {
   degatsMaxFinal: number;
   statUtilisee: string;
   effetId?: number | null;
+  zoneTaille: number;
+  zoneType: ZoneType;
 }
 
 export interface CombatState {
@@ -436,36 +457,6 @@ export interface DonjonSalle {
   mapId: number;
   map?: GameMap;
   compositions?: DonjonSalleComposition[];
-}
-
-export interface GrilleCombat {
-  id: number;
-  nom: string;
-  mapId: number;
-  largeur: number;
-  hauteur: number;
-  cases?: GrilleCase[];
-  spawns?: GrilleSpawn[];
-  map?: { id: number; nom: string };
-  _count?: { cases: number; spawns: number };
-}
-
-export interface GrilleCase {
-  id: number;
-  grilleId: number;
-  x: number;
-  y: number;
-  bloqueDeplacement: boolean;
-  bloqueLigneDeVue: boolean;
-}
-
-export interface GrilleSpawn {
-  id: number;
-  grilleId: number;
-  x: number;
-  y: number;
-  equipe: number;
-  ordre: number;
 }
 
 // ============ Ressources / Drops / Inventaire / Craft / Panoplies ============
