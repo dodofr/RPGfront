@@ -270,7 +270,6 @@ const MonstreDetailPage: React.FC = () => {
                         <span>{ms.sort.degatsMin}-{ms.sort.degatsMax} dmg</span>
                         <span>{ms.sort.porteeMin}-{ms.sort.porteeMax} PO</span>
                         {ms.sort.estSoin && <span style={{ color: 'var(--success)' }}>Soin</span>}
-                        {ms.sort.estDispel && <span style={{ color: 'var(--info)' }}>Dispel</span>}
                       </span>
                     )}
                   </div>

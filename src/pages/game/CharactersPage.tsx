@@ -370,7 +370,6 @@ const CharactersPage: React.FC<CharactersPageProps> = ({ playerId: playerIdProp 
                     <span>{s.porteeMin}-{s.porteeMax} po</span>
                     {s.cooldown > 0 && <span>{s.cooldown} CD</span>}
                     {s.estSoin && <span style={{ color: 'var(--success)' }}>Soin</span>}
-                    {s.estDispel && <span style={{ color: 'var(--info)' }}>Dispel</span>}
                     {s.estInvocation && <span style={{ color: 'var(--warning)' }}>Invoc.</span>}
                     {s.estVolDeVie && <span style={{ color: '#00c853' }}>Vol de vie</span>}
                     {s.tauxEchec > 0 && <span style={{ color: 'var(--danger)' }}>Echec {Math.round(s.tauxEchec * 100)}%</span>}

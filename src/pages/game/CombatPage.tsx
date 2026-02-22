@@ -226,6 +226,7 @@ const CombatPage: React.FC = () => {
     const porteeMin = selectedSort ? selectedSort.porteeMin : armeData?.porteeMin ?? 1;
     const porteeMax = selectedSort ? selectedSort.porteeMax : armeData?.porteeMax ?? 1;
     const needLos = selectedSort ? selectedSort.ligneDeVue : armeData?.ligneDeVue ?? true;
+    const isLigneDirecte = selectedSort?.ligneDirecte ?? false;
 
     const allInRange = getCellsInRange(
       currentEntity.position,
@@ -235,11 +236,23 @@ const CombatPage: React.FC = () => {
       combat.grille.hauteur
     );
 
-    if (!needLos) return allInRange;
+    // Filter ligne droite: keep only cells on same row or column
+    const inRangeFiltered = isLigneDirecte
+      ? (() => {
+          const r = new Set<string>();
+          allInRange.forEach(k => {
+            const [cx, cy] = k.split(',').map(Number);
+            if (cx === currentEntity.position.x || cy === currentEntity.position.y) r.add(k);
+          });
+          return r;
+        })()
+      : allInRange;
+
+    if (!needLos) return inRangeFiltered;
 
     // Filter by LOS
     const result = new Set<string>();
-    allInRange.forEach(k => {
+    inRangeFiltered.forEach(k => {
       const [cx, cy] = k.split(',').map(Number);
       if (hasLineOfSight(currentEntity.position, { x: cx, y: cy }, combat.entites, combat.cases)) {
         result.add(k);
@@ -258,14 +271,25 @@ const CombatPage: React.FC = () => {
 
     const porteeMin = selectedSort ? selectedSort.porteeMin : armeData?.porteeMin ?? 1;
     const porteeMax = selectedSort ? selectedSort.porteeMax : armeData?.porteeMax ?? 1;
+    const isLigneDirecte = selectedSort?.ligneDirecte ?? false;
 
-    const allInRange = getCellsInRange(
+    let allInRange = getCellsInRange(
       currentEntity.position,
       porteeMin,
       porteeMax,
       combat.grille.largeur,
       combat.grille.hauteur
     );
+
+    // Apply ligne droite filter so diagonal cells don't show as "LOS blocked"
+    if (isLigneDirecte) {
+      const r = new Set<string>();
+      allInRange.forEach(k => {
+        const [cx, cy] = k.split(',').map(Number);
+        if (cx === currentEntity.position.x || cy === currentEntity.position.y) r.add(k);
+      });
+      allInRange = r;
+    }
 
     const blocked = new Set<string>();
     allInRange.forEach(k => {
@@ -391,7 +415,6 @@ const CombatPage: React.FC = () => {
         cooldown: selectedSort.cooldown,
         cooldownRestant: selectedSort.cooldownRestant ?? 0,
         estSoin: selectedSort.estSoin,
-        estDispel: selectedSort.estDispel,
         estInvocation: selectedSort.estInvocation,
         estVolDeVie: selectedSort.estVolDeVie ?? false,
         effets: selectedSort.effets || [],
@@ -416,7 +439,6 @@ const CombatPage: React.FC = () => {
         cooldown: armeData.cooldown,
         cooldownRestant: currentEntity?.armeCooldownRestant ?? 0,
         estSoin: false,
-        estDispel: false,
         estInvocation: false,
         estVolDeVie: armeData.estVolDeVie ?? false,
         effets: [] as NonNullable<Sort['effets']>,
@@ -628,13 +650,13 @@ const CombatPage: React.FC = () => {
                       </>
                     ) : (
                       <>
-                        {!spellInfoData.estDispel && !spellInfoData.estInvocation && (
+                        {!spellInfoData.estInvocation && (
                           <div className="spell-info-row">
                             <span className="label">{spellInfoData.estSoin ? 'Soin' : 'Degats'}</span>
                             <span>{spellInfoData.degatsMin}-{spellInfoData.degatsMax} {STAT_LABELS[spellInfoData.statUtilisee] || spellInfoData.statUtilisee}</span>
                           </div>
                         )}
-                        {!spellInfoData.estDispel && !spellInfoData.estInvocation && spellInfoData.degatsCritMin > 0 && (
+                        {!spellInfoData.estInvocation && spellInfoData.degatsCritMin > 0 && (
                           <div className="spell-info-row">
                             <span className="label">Critique</span>
                             <span>{spellInfoData.degatsCritMin}-{spellInfoData.degatsCritMax} ({Math.round(spellInfoData.chanceCritBase * 100)}%)</span>
@@ -668,14 +690,14 @@ const CombatPage: React.FC = () => {
                       </div>
                     )}
                   </div>
-                  {(spellInfoData.estSoin || spellInfoData.estDispel || spellInfoData.estInvocation || spellInfoData.estVolDeVie || selectedSort?.estGlyphe || selectedSort?.estPiege) && (
+                  {(spellInfoData.estSoin || spellInfoData.estInvocation || spellInfoData.estVolDeVie || selectedSort?.estGlyphe || selectedSort?.estPiege || selectedSort?.ligneDirecte) && (
                     <div className="spell-info-badges">
                       {spellInfoData.estSoin && <span className="spell-badge heal">Soin</span>}
-                      {spellInfoData.estDispel && <span className="spell-badge dispel">Dispel</span>}
                       {spellInfoData.estInvocation && <span className="spell-badge invocation">Invocation</span>}
                       {spellInfoData.estVolDeVie && <span className="spell-badge lifesteal">Vol de vie</span>}
                       {selectedSort?.estGlyphe && <span className="spell-badge" style={{ background: 'rgba(255,140,0,0.2)', color: '#ff8c00' }}>Glyphe ({selectedSort.poseDuree ?? '?'}t)</span>}
                       {selectedSort?.estPiege && <span className="spell-badge" style={{ background: 'rgba(180,0,200,0.2)', color: '#b400c8' }}>Piège ({selectedSort.poseDuree ?? '?'}t)</span>}
+                      {selectedSort?.ligneDirecte && <span className="spell-badge" style={{ background: 'rgba(0,150,255,0.15)', color: '#0096ff' }}>Ligne droite</span>}
                     </div>
                   )}
                   {/* Effects section */}
@@ -729,7 +751,9 @@ const CombatPage: React.FC = () => {
                 const piege = piegeCellMap.get(cellKey);
 
                 let cellClass = 'combat-cell';
-                if (obstacle) cellClass += ' obstacle';
+                if (obstacle) {
+                  cellClass += obstacle.bloqueLigneDeVue ? ' obstacle-los' : ' obstacle';
+                }
                 if (entity && !isDead) {
                   if (entity.invocateurId) cellClass += ' invocation-cell';
                   else if (entity.equipe === 0) cellClass += ' player-cell';

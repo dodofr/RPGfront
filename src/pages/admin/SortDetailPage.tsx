@@ -61,12 +61,12 @@ const SortDetailPage: React.FC = () => {
 
   // Flags
   const [estSoin, setEstSoin] = useState(false);
-  const [estDispel, setEstDispel] = useState(false);
   const [estInvocation, setEstInvocation] = useState(false);
   const [estVolDeVie, setEstVolDeVie] = useState(false);
   const [estGlyphe, setEstGlyphe] = useState(false);
   const [estPiege, setEstPiege] = useState(false);
   const [porteeModifiable, setPorteeModifiable] = useState(true);
+  const [ligneDirecte, setLigneDirecte] = useState(false);
 
   // Effets
   const [addEffetId, setAddEffetId] = useState<number>(0);
@@ -100,12 +100,12 @@ const SortDetailPage: React.FC = () => {
       setPoseDuree(data.poseDuree ?? null);
       setDescription(data.description ?? '');
       setEstSoin(data.estSoin);
-      setEstDispel(data.estDispel);
       setEstInvocation(data.estInvocation);
       setEstVolDeVie(data.estVolDeVie);
       setEstGlyphe(data.estGlyphe ?? false);
       setEstPiege(data.estPiege ?? false);
       setPorteeModifiable(data.porteeModifiable !== false);
+      setLigneDirecte(data.ligneDirecte ?? false);
     } finally {
       setLoading(false);
     }
@@ -131,7 +131,7 @@ const SortDetailPage: React.FC = () => {
       invocationTemplateId: estInvocation ? (invocationTemplateId || null) : null,
       poseDuree: (estGlyphe || estPiege) ? poseDuree : null,
       description: description || null,
-      estSoin, estDispel, estInvocation, estVolDeVie, estGlyphe, estPiege, porteeModifiable,
+      estSoin, estInvocation, estVolDeVie, estGlyphe, estPiege, porteeModifiable, ligneDirecte,
     });
     await load();
     setSaving(false);
@@ -178,11 +178,11 @@ const SortDetailPage: React.FC = () => {
           <span className="badge badge-muted">ID {sort.id}</span>
           {raceName && <span className="badge badge-info">{raceName}</span>}
           {estSoin && <span className="badge badge-success">Soin</span>}
-          {estDispel && <span className="badge badge-dispel">Dispel</span>}
           {estInvocation && <span className="badge badge-warning">Invocation</span>}
           {estVolDeVie && <span className="badge badge-poison">Vol de vie</span>}
           {estGlyphe && <span className="badge badge-warning">Glyphe</span>}
           {estPiege && <span className="badge badge-secondary">Piège</span>}
+          {ligneDirecte && <span className="badge badge-info">Ligne droite</span>}
           {tauxEchec > 0 && <span className="badge badge-danger">Echec {Math.round(tauxEchec * 100)}%</span>}
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -288,12 +288,12 @@ const SortDetailPage: React.FC = () => {
             {([
               ['Ligne de vue', ligneDeVue, setLigneDeVue],
               ['Est soin', estSoin, setEstSoin],
-              ['Est dispel', estDispel, setEstDispel],
               ['Est invocation', estInvocation, setEstInvocation],
               ['Vol de vie', estVolDeVie, setEstVolDeVie],
               ['Pose un glyphe', estGlyphe, setEstGlyphe],
               ['Pose un piège', estPiege, setEstPiege],
               ['PO modifiable par buffs', porteeModifiable, setPorteeModifiable],
+              ['Ligne droite uniquement', ligneDirecte, setLigneDirecte],
             ] as [string, boolean, (v: boolean) => void][]).map(([label, val, setter]) => (
               <label key={label} className="detail-page-flag-row">
                 <input type="checkbox" checked={val} onChange={e => setter(e.target.checked)} />

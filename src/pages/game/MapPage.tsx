@@ -151,6 +151,15 @@ const MapPage: React.FC = () => {
     return set;
   }, [mapCases]);
 
+  // Lookup O(1) pour les cases qui bloquent aussi la ligne de vue
+  const losBlockedAt = useMemo(() => {
+    const set = new Set<string>();
+    for (const c of mapCases) {
+      if (c.bloqueLigneDeVue || c.estExclue) set.add(`${c.x},${c.y}`);
+    }
+    return set;
+  }, [mapCases]);
+
   const handleCellClick = async (x: number, y: number) => {
     if (!group || !mapData || moving) return;
 
@@ -438,8 +447,9 @@ const MapPage: React.FC = () => {
                 const isPlayerHere = x === group.positionX && y === group.positionY;
 
                 const isBlocked = blockedAt.has(`${x},${y}`);
+                const isLosBlocked = losBlockedAt.has(`${x},${y}`);
                 let className = 'adventure-cell';
-                if (isBlocked) className += ' cell-obstacle';
+                if (isBlocked) className += isLosBlocked ? ' cell-obstacle-los' : ' cell-obstacle';
                 if (isPlayerHere) className += ' cell-player';
                 else if (cellType === 'enemy') className += ' cell-enemy';
                 else if (cellType === 'connection') className += ' cell-connection';

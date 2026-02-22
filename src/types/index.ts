@@ -55,7 +55,6 @@ export interface Sort {
   cooldown: number;
   cooldownRestant?: number;
   estSoin: boolean;
-  estDispel: boolean;
   tauxEchec: number;
   niveauApprentissage: number;
   zoneId: number | null;
@@ -68,6 +67,7 @@ export interface Sort {
   estPiege?: boolean;
   poseDuree?: number | null;
   porteeModifiable?: boolean;
+  ligneDirecte?: boolean;
   invocationTemplateId: number | null;
   effets?: {
     effetId: number;

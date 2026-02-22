@@ -14,7 +14,6 @@ type SortOrigin = 'race' | 'monstre' | 'neutre';
 // Flags disponibles à la création
 const FLAG_OPTIONS = [
   { key: 'estSoin', label: '💚 Soin', desc: 'Soigne au lieu de blesser' },
-  { key: 'estDispel', label: '✨ Dispel', desc: 'Supprime les effets actifs' },
   { key: 'estInvocation', label: '🔮 Invocation', desc: 'Invoque un familier' },
   { key: 'estVolDeVie', label: '🩸 Vol de vie', desc: 'Regagne des PV sur les dégâts' },
   { key: 'estGlyphe', label: '🔶 Glyphe', desc: 'Pose une zone visible (déclenche au tour)' },
@@ -62,7 +61,6 @@ const CreateModal: React.FC<{
       zoneId: null,
       invocationTemplateId: null,
       estSoin: flags.includes('estSoin'),
-      estDispel: flags.includes('estDispel'),
       estInvocation: flags.includes('estInvocation'),
       estVolDeVie: flags.includes('estVolDeVie'),
       estGlyphe: flags.includes('estGlyphe'),
@@ -234,11 +232,11 @@ const SortsPage: React.FC = () => {
       render: (item) => {
         const flags: string[] = [];
         if (item.estSoin) flags.push('Soin');
-        if (item.estDispel) flags.push('Dispel');
         if (item.estInvocation) flags.push('Invoc.');
         if (item.estVolDeVie) flags.push('VdV');
         if (item.estGlyphe) flags.push('Glyphe');
         if (item.estPiege) flags.push('Piège');
+        if (item.ligneDirecte) flags.push('LDroite');
         if (item.tauxEchec > 0) flags.push(`${Math.round(item.tauxEchec * 100)}%`);
         return flags.join(', ') || '-';
       },
