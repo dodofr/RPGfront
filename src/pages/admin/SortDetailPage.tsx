@@ -65,6 +65,7 @@ const SortDetailPage: React.FC = () => {
   const [estVolDeVie, setEstVolDeVie] = useState(false);
   const [estGlyphe, setEstGlyphe] = useState(false);
   const [estPiege, setEstPiege] = useState(false);
+  const [estTeleportation, setEstTeleportation] = useState(false);
   const [porteeModifiable, setPorteeModifiable] = useState(true);
   const [ligneDirecte, setLigneDirecte] = useState(false);
 
@@ -104,6 +105,7 @@ const SortDetailPage: React.FC = () => {
       setEstVolDeVie(data.estVolDeVie);
       setEstGlyphe(data.estGlyphe ?? false);
       setEstPiege(data.estPiege ?? false);
+      setEstTeleportation(data.estTeleportation ?? false);
       setPorteeModifiable(data.porteeModifiable !== false);
       setLigneDirecte(data.ligneDirecte ?? false);
     } finally {
@@ -131,7 +133,7 @@ const SortDetailPage: React.FC = () => {
       invocationTemplateId: estInvocation ? (invocationTemplateId || null) : null,
       poseDuree: (estGlyphe || estPiege) ? poseDuree : null,
       description: description || null,
-      estSoin, estInvocation, estVolDeVie, estGlyphe, estPiege, porteeModifiable, ligneDirecte,
+      estSoin, estInvocation, estVolDeVie, estGlyphe, estPiege, estTeleportation, porteeModifiable, ligneDirecte,
     });
     await load();
     setSaving(false);
@@ -182,6 +184,7 @@ const SortDetailPage: React.FC = () => {
           {estVolDeVie && <span className="badge badge-poison">Vol de vie</span>}
           {estGlyphe && <span className="badge badge-warning">Glyphe</span>}
           {estPiege && <span className="badge badge-secondary">Piège</span>}
+          {estTeleportation && <span className="badge badge-info">Téléportation</span>}
           {ligneDirecte && <span className="badge badge-info">Ligne droite</span>}
           {tauxEchec > 0 && <span className="badge badge-danger">Echec {Math.round(tauxEchec * 100)}%</span>}
         </div>
@@ -292,6 +295,7 @@ const SortDetailPage: React.FC = () => {
               ['Vol de vie', estVolDeVie, setEstVolDeVie],
               ['Pose un glyphe', estGlyphe, setEstGlyphe],
               ['Pose un piège', estPiege, setEstPiege],
+              ['Téléportation', estTeleportation, setEstTeleportation],
               ['PO modifiable par buffs', porteeModifiable, setPorteeModifiable],
               ['Ligne droite uniquement', ligneDirecte, setLigneDirecte],
             ] as [string, boolean, (v: boolean) => void][]).map(([label, val, setter]) => (
@@ -349,7 +353,7 @@ const SortDetailPage: React.FC = () => {
                         <span>{eType === 'POISON' && valMin != null ? `${valMin}-${getEffetValeur(e)} dgts/tour` : `${getEffetValeur(e) > 0 ? '+' : ''}${getEffetValeur(e)} ${getEffetStat(e)}`}</span>
                         <span>{getEffetDuree(e)}t</span>
                         <span>{Math.round(e.chanceDeclenchement * 100)}%</span>
-                        <span>{e.surCible ? 'Sur cible' : 'Sur lanceur'}</span>
+                        <span className="badge badge-info">{e.surCible ? 'Sur cible(s)' : 'Sur lanceur'}</span>
                       </span>
                     </div>
                     <button className="btn btn-sm btn-danger" onClick={() => handleRemoveEffect(getEffetId(e))}>X</button>
@@ -358,18 +362,23 @@ const SortDetailPage: React.FC = () => {
               })
             ) : <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Aucun effet lié</div>}
           </div>
-          <div className="inline-add">
-            <select value={addEffetId} onChange={e => setAddEffetId(Number(e.target.value))}>
-              <option value={0}>-- Effet --</option>
-              {allEffets.map(ef => <option key={ef.id} value={ef.id}>{ef.nom} ({ef.type})</option>)}
-            </select>
-            <input type="number" value={addChance} onChange={e => setAddChance(Number(e.target.value))}
-              min={1} max={100} style={{ width: 60 }} placeholder="%" />
-            <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13 }}>
-              <input type="checkbox" checked={addSurCible} onChange={e => setAddSurCible(e.target.checked)} />
-              Sur cible
-            </label>
-            <button className="btn btn-sm btn-success" onClick={handleAddEffect} disabled={!addEffetId}>+ Ajouter</button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div className="inline-add">
+              <select value={addEffetId} onChange={e => setAddEffetId(Number(e.target.value))}>
+                <option value={0}>-- Effet --</option>
+                {allEffets.map(ef => <option key={ef.id} value={ef.id}>{ef.nom} ({ef.type})</option>)}
+              </select>
+              <input type="number" value={addChance} onChange={e => setAddChance(Number(e.target.value))}
+                min={1} max={100} style={{ width: 60 }} placeholder="%" />
+              <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, cursor: 'pointer' }}>
+                <input type="checkbox" checked={addSurCible} onChange={e => setAddSurCible(e.target.checked)} />
+                Sur cible(s)
+              </label>
+              <button className="btn btn-sm btn-success" onClick={handleAddEffect} disabled={!addEffetId}>+ Ajouter</button>
+            </div>
+            <div style={{ color: 'var(--text-muted)', fontSize: 11, paddingLeft: 2 }}>
+              ✅ coché = effet sur les cibles dans la zone &nbsp;|&nbsp; ☐ décoché = dégâts sur cible, effet sur le lanceur
+            </div>
           </div>
         </div>
 

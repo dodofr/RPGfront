@@ -18,6 +18,7 @@ const FLAG_OPTIONS = [
   { key: 'estVolDeVie', label: '🩸 Vol de vie', desc: 'Regagne des PV sur les dégâts' },
   { key: 'estGlyphe', label: '🔶 Glyphe', desc: 'Pose une zone visible (déclenche au tour)' },
   { key: 'estPiege', label: '🪤 Piège', desc: 'Pose une zone cachée (déclenche au passage)' },
+  { key: 'estTeleportation', label: '✨ Téléportation', desc: 'Le lanceur se téléporte à la position cible' },
   { key: 'estDispelOnly', label: '⚔️ Standard', desc: 'Sort de dégâts ou utilitaire normal' },
 ] as const;
 
@@ -65,7 +66,8 @@ const CreateModal: React.FC<{
       estVolDeVie: flags.includes('estVolDeVie'),
       estGlyphe: flags.includes('estGlyphe'),
       estPiege: flags.includes('estPiege'),
-      porteeModifiable: !flags.includes('estInvocation'),
+      estTeleportation: flags.includes('estTeleportation'),
+      porteeModifiable: !flags.includes('estInvocation') && !flags.includes('estTeleportation'),
     };
     await onCreate(nom.trim(), payload);
     reset();
@@ -197,20 +199,34 @@ const SortsPage: React.FC = () => {
   const [deleting, setDeleting] = useState<Sort | null>(null);
   const [races, setRaces] = useState<Race[]>([]);
   const [activeTab, setActiveTab] = useState<TabFilter>('all');
+  const [raceFilter, setRaceFilter] = useState<number | null>(null);
+  const [searchText, setSearchText] = useState('');
 
   useEffect(() => { racesApi.getAll().then(setRaces); }, []);
 
+  const handleTabChange = (tab: TabFilter) => {
+    setActiveTab(tab);
+    setRaceFilter(null);
+    setSearchText('');
+  };
+
   const filteredItems = items.filter(sort => {
     switch (activeTab) {
-      case 'race': return sort.raceId !== null;
-      case 'monstre': return sort.raceId === null && !sort.estInvocation;
-      case 'invocation': return sort.estInvocation;
-      default: return true;
+      case 'race': if (sort.raceId === null) return false; break;
+      case 'monstre': if (sort.raceId !== null || sort.estInvocation) return false; break;
+      case 'invocation': if (!sort.estInvocation) return false; break;
     }
+    if (activeTab === 'race' && raceFilter !== null && sort.raceId !== raceFilter) return false;
+    if (searchText && !sort.nom.toLowerCase().includes(searchText.toLowerCase())) return false;
+    return true;
   });
 
   const sortedItems = activeTab === 'race'
-    ? [...filteredItems].sort((a, b) => (a.race?.nom || '').localeCompare(b.race?.nom || ''))
+    ? [...filteredItems].sort((a, b) => {
+        if (raceFilter !== null) return a.niveauApprentissage - b.niveauApprentissage;
+        const raceCmp = (a.race?.nom || '').localeCompare(b.race?.nom || '');
+        return raceCmp !== 0 ? raceCmp : a.niveauApprentissage - b.niveauApprentissage;
+      })
     : filteredItems;
 
   const handleCreate = async (nom: string, payload: Partial<Sort>) => {
@@ -264,12 +280,51 @@ const SortsPage: React.FC = () => {
           <button
             key={tab.key}
             className={`tab-btn ${activeTab === tab.key ? 'active' : ''}`}
-            onClick={() => setActiveTab(tab.key)}
+            onClick={() => handleTabChange(tab.key)}
           >
             {tab.label} ({tab.count})
           </button>
         ))}
       </div>
+
+      {/* Barre de recherche */}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '8px 0' }}>
+        <input
+          type="text"
+          placeholder="Rechercher un sort par nom..."
+          value={searchText}
+          onChange={e => setSearchText(e.target.value)}
+          style={{ flex: 1, padding: '7px 10px', background: 'var(--bg-light)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontSize: 13 }}
+        />
+        {searchText && (
+          <button className="btn btn-secondary btn-sm" onClick={() => setSearchText('')}>✕</button>
+        )}
+      </div>
+
+      {/* Filtre par race (tab "Sorts de race" uniquement) */}
+      {activeTab === 'race' && (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+          <button
+            className={`btn btn-sm ${raceFilter === null ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => setRaceFilter(null)}
+          >
+            Toutes ({items.filter(s => s.raceId !== null).length})
+          </button>
+          {races.map(race => {
+            const count = items.filter(s => s.raceId === race.id).length;
+            return (
+              <button
+                key={race.id}
+                className={`btn btn-sm ${raceFilter === race.id ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setRaceFilter(raceFilter === race.id ? null : race.id)}
+              >
+                {race.nom} ({count})
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       <DataTable
         columns={columns}
         data={sortedItems}

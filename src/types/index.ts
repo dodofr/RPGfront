@@ -65,6 +65,7 @@ export interface Sort {
   estVolDeVie: boolean;
   estGlyphe?: boolean;
   estPiege?: boolean;
+  estTeleportation?: boolean;
   poseDuree?: number | null;
   porteeModifiable?: boolean;
   ligneDirecte?: boolean;

@@ -175,6 +175,9 @@ const CombatPage: React.FC = () => {
   const entityMap = new Map<string, CombatEntity>();
   combat.entites.filter(e => e.pvActuels > 0).forEach(e => entityMap.set(`${e.position.x},${e.position.y}`, e));
 
+  // Equipe du joueur (toujours 0)
+  const monEquipe = 0;
+
   // Precompute zone cell maps (glyphes + pièges visibles)
   const glypheCellMap = new Map<string, ZonePoseeState>();
   const piegeCellMap = new Map<string, ZonePoseeState>();
@@ -195,9 +198,6 @@ const CombatPage: React.FC = () => {
       }
     }
   }
-
-  // Equipe du joueur (toujours 0)
-  const monEquipe = 0;
 
   // ArmeData helper
   const armeData = currentEntity?.armeData ? currentEntity.armeData as unknown as ArmeData : null;
@@ -248,7 +248,21 @@ const CombatPage: React.FC = () => {
         })()
       : allInRange;
 
-    if (!needLos) return inRangeFiltered;
+    if (!needLos) {
+      // For teleportation: exclude occupied and blocked destination cells
+      if (selectedSort?.estTeleportation) {
+        const occupiedSet = new Set<string>();
+        const blockedSet = new Set<string>();
+        combat.entites.filter(e => e.pvActuels > 0).forEach(e => occupiedSet.add(`${e.position.x},${e.position.y}`));
+        combat.cases.filter(c => c.bloqueDeplacement).forEach(c => blockedSet.add(`${c.x},${c.y}`));
+        const filtered = new Set<string>();
+        inRangeFiltered.forEach(k => {
+          if (!occupiedSet.has(k) && !blockedSet.has(k)) filtered.add(k);
+        });
+        return filtered;
+      }
+      return inRangeFiltered;
+    }
 
     // Filter by LOS
     const result = new Set<string>();
@@ -267,7 +281,28 @@ const CombatPage: React.FC = () => {
     if (!selectedSort && !weaponMode) return new Set<string>();
 
     const needLos = selectedSort ? selectedSort.ligneDeVue : armeData?.ligneDeVue ?? true;
-    if (!needLos) return new Set<string>();
+    if (!needLos) {
+      // For teleportation: show occupied and bloqueDeplacement cells as "blocked range"
+      if (selectedSort?.estTeleportation) {
+        const allInRange = getCellsInRange(
+          currentEntity.position,
+          selectedSort.porteeMin,
+          selectedSort.porteeMax,
+          combat.grille.largeur,
+          combat.grille.hauteur
+        );
+        const occupiedSet = new Set<string>();
+        const blockedSet = new Set<string>();
+        combat.entites.filter(e => e.pvActuels > 0).forEach(e => occupiedSet.add(`${e.position.x},${e.position.y}`));
+        combat.cases.filter(c => c.bloqueDeplacement).forEach(c => blockedSet.add(`${c.x},${c.y}`));
+        const result = new Set<string>();
+        allInRange.forEach(k => {
+          if (occupiedSet.has(k) || blockedSet.has(k)) result.add(k);
+        });
+        return result;
+      }
+      return new Set<string>();
+    }
 
     const porteeMin = selectedSort ? selectedSort.porteeMin : armeData?.porteeMin ?? 1;
     const porteeMax = selectedSort ? selectedSort.porteeMax : armeData?.porteeMax ?? 1;
@@ -690,13 +725,14 @@ const CombatPage: React.FC = () => {
                       </div>
                     )}
                   </div>
-                  {(spellInfoData.estSoin || spellInfoData.estInvocation || spellInfoData.estVolDeVie || selectedSort?.estGlyphe || selectedSort?.estPiege || selectedSort?.ligneDirecte) && (
+                  {(spellInfoData.estSoin || spellInfoData.estInvocation || spellInfoData.estVolDeVie || selectedSort?.estGlyphe || selectedSort?.estPiege || selectedSort?.estTeleportation || selectedSort?.ligneDirecte) && (
                     <div className="spell-info-badges">
                       {spellInfoData.estSoin && <span className="spell-badge heal">Soin</span>}
                       {spellInfoData.estInvocation && <span className="spell-badge invocation">Invocation</span>}
                       {spellInfoData.estVolDeVie && <span className="spell-badge lifesteal">Vol de vie</span>}
                       {selectedSort?.estGlyphe && <span className="spell-badge" style={{ background: 'rgba(255,140,0,0.2)', color: '#ff8c00' }}>Glyphe ({selectedSort.poseDuree ?? '?'}t)</span>}
                       {selectedSort?.estPiege && <span className="spell-badge" style={{ background: 'rgba(180,0,200,0.2)', color: '#b400c8' }}>Piège ({selectedSort.poseDuree ?? '?'}t)</span>}
+                      {selectedSort?.estTeleportation && <span className="spell-badge" style={{ background: 'rgba(100,60,220,0.2)', color: '#7c3aed' }}>Téléportation</span>}
                       {selectedSort?.ligneDirecte && <span className="spell-badge" style={{ background: 'rgba(0,150,255,0.15)', color: '#0096ff' }}>Ligne droite</span>}
                     </div>
                   )}
