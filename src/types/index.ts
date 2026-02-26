@@ -2,7 +2,7 @@
 export type StatType = 'FORCE' | 'INTELLIGENCE' | 'DEXTERITE' | 'AGILITE' | 'VIE' | 'CHANCE' | 'PA' | 'PM' | 'PO' | 'CRITIQUE';
 export type SortType = 'ARME' | 'SORT';
 export type SlotType = 'ARME' | 'COIFFE' | 'AMULETTE' | 'BOUCLIER' | 'HAUT' | 'BAS' | 'ANNEAU1' | 'ANNEAU2' | 'FAMILIER';
-export type EffetType = 'BUFF' | 'DEBUFF' | 'DISPEL' | 'POUSSEE' | 'ATTIRANCE' | 'POISON' | 'BOUCLIER';
+export type EffetType = 'BUFF' | 'DEBUFF' | 'DISPEL' | 'POUSSEE' | 'ATTIRANCE' | 'POISON' | 'BOUCLIER' | 'RESISTANCE';
 export type ZoneType = 'CASE' | 'CROIX' | 'LIGNE' | 'CONE' | 'CERCLE' | 'LIGNE_PERPENDICULAIRE' | 'DIAGONALE' | 'CARRE' | 'ANNEAU' | 'CONE_INVERSE';
 export type CombatStatus = 'EN_COURS' | 'TERMINE' | 'ABANDONNE';
 export type RegionType = 'FORET' | 'PLAINE' | 'DESERT' | 'MONTAGNE' | 'MARAIS' | 'CAVERNE' | 'CITE';
@@ -69,6 +69,7 @@ export interface Sort {
   poseDuree?: number | null;
   porteeModifiable?: boolean;
   ligneDirecte?: boolean;
+  coefficient?: number;
   invocationTemplateId: number | null;
   effets?: {
     effetId: number;
@@ -119,6 +120,14 @@ export interface Equipment {
   bonusPMMax: number | null;
   bonusPOMax: number | null;
   bonusCritiqueMax: number | null;
+  resistanceForce: number;
+  resistanceIntelligence: number;
+  resistanceDexterite: number;
+  resistanceAgilite: number;
+  resistanceForceMax: number | null;
+  resistanceIntelligenceMax: number | null;
+  resistanceDexteriteMax: number | null;
+  resistanceAgiliteMax: number | null;
   degatsMin: number | null;
   degatsMax: number | null;
   chanceCritBase: number | null;
@@ -250,6 +259,10 @@ export interface MonsterTemplate {
   orMax: number;
   iaType: IAType;
   pvScalingInvocation: number | null;
+  resistanceForce: number;
+  resistanceIntelligence: number;
+  resistanceDexterite: number;
+  resistanceAgilite: number;
   regions?: { region: { id: number; nom: string } }[];
   sorts?: MonstreSort[];
   drops?: MonstreDrop[];
@@ -302,6 +315,10 @@ export interface TotalStats {
   po: number;
   bonusCritique: number;
   pvMax: number;
+  resistanceForce: number;
+  resistanceIntelligence: number;
+  resistanceDexterite: number;
+  resistanceAgilite: number;
 }
 
 export interface Character {
@@ -365,6 +382,10 @@ export interface CombatEntity {
   iaType: string | null;
   poBonus: number;
   bonusCritique: number;
+  resistanceForce: number;
+  resistanceIntelligence: number;
+  resistanceDexterite: number;
+  resistanceAgilite: number;
   sorts?: Sort[];
 }
 
@@ -543,6 +564,10 @@ export interface InventoryItemInstance {
   bonusPM: number;
   bonusPO: number;
   bonusCritique: number;
+  resistanceForce: number;
+  resistanceIntelligence: number;
+  resistanceDexterite: number;
+  resistanceAgilite: number;
   estEquipe: boolean;
   panoplieId: number | null;
 }

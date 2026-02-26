@@ -59,6 +59,8 @@ const SortDetailPage: React.FC = () => {
   const [poseDuree, setPoseDuree] = useState<number | null>(null);
   const [description, setDescription] = useState('');
 
+  const [coefficient, setCoefficient] = useState<number>(1.0);
+
   // Flags
   const [estSoin, setEstSoin] = useState(false);
   const [estInvocation, setEstInvocation] = useState(false);
@@ -108,6 +110,7 @@ const SortDetailPage: React.FC = () => {
       setEstTeleportation(data.estTeleportation ?? false);
       setPorteeModifiable(data.porteeModifiable !== false);
       setLigneDirecte(data.ligneDirecte ?? false);
+      setCoefficient(data.coefficient ?? 1.0);
     } finally {
       setLoading(false);
     }
@@ -134,6 +137,7 @@ const SortDetailPage: React.FC = () => {
       poseDuree: (estGlyphe || estPiege) ? poseDuree : null,
       description: description || null,
       estSoin, estInvocation, estVolDeVie, estGlyphe, estPiege, estTeleportation, porteeModifiable, ligneDirecte,
+      coefficient,
     });
     await load();
     setSaving(false);
@@ -281,6 +285,10 @@ const SortDetailPage: React.FC = () => {
               <label>Chance crit base (0-1)</label>
               <input type="number" step={0.01} min={0} max={1} value={chanceCritBase} onChange={e => setChanceCritBase(Number(e.target.value))} />
             </div>
+            <div className="detail-page-field">
+              <label>Coefficient (0-10)</label>
+              <input type="number" step={0.05} min={0} max={10} value={coefficient} onChange={e => setCoefficient(Number(e.target.value))} />
+            </div>
           </div>
         </div>
 
@@ -342,7 +350,7 @@ const SortDetailPage: React.FC = () => {
             {sort.effets && sort.effets.length > 0 ? (
               sort.effets.map((e, i) => {
                 const eType = getEffetType(e);
-                const badgeClass = eType === 'DISPEL' ? 'badge-dispel' : eType === 'BUFF' ? 'badge-success' : eType === 'POISON' ? 'badge-poison' : (eType === 'POUSSEE' || eType === 'ATTIRANCE') ? 'badge-movement' : 'badge-danger';
+                const badgeClass = eType === 'DISPEL' ? 'badge-dispel' : eType === 'BUFF' ? 'badge-success' : eType === 'POISON' ? 'badge-poison' : (eType === 'POUSSEE' || eType === 'ATTIRANCE') ? 'badge-movement' : eType === 'BOUCLIER' ? 'badge-info' : eType === 'RESISTANCE' ? (getEffetValeur(e) >= 0 ? 'badge-info' : 'badge-danger') : 'badge-danger';
                 const valMin = getEffetValeurMin(e);
                 return (
                   <div key={i} className="sort-item">

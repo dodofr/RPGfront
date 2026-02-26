@@ -12,6 +12,8 @@ export const charactersApi = {
   getSpells: (id: number) => api.get(`/characters/${id}/spells`).then(r => r.data),
   allocateStats: (id: number, stats: Record<string, number>) =>
     api.post(`/characters/${id}/allocate-stats`, stats).then(r => r.data),
+  resetStats: (id: number) =>
+    api.post(`/characters/${id}/reset-stats`, {}).then(r => r.data),
   getProgression: (id: number) => api.get(`/characters/${id}/progression`).then(r => r.data),
 
   // Inventory

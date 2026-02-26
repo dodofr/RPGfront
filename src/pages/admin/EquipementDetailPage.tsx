@@ -68,6 +68,14 @@ const EquipementDetailPage: React.FC = () => {
   const [bonusPOMax, setBonusPOMax] = useState<number | null>(null);
   const [bonusCritique, setBonusCritique] = useState(0);
   const [bonusCritiqueMax, setBonusCritiqueMax] = useState<number | null>(null);
+  const [resistanceForce, setResistanceForce] = useState(0);
+  const [resistanceForceMax, setResistanceForceMax] = useState<number | null>(null);
+  const [resistanceIntelligence, setResistanceIntelligence] = useState(0);
+  const [resistanceIntelligenceMax, setResistanceIntelligenceMax] = useState<number | null>(null);
+  const [resistanceDexterite, setResistanceDexterite] = useState(0);
+  const [resistanceDexteriteMax, setResistanceDexteriteMax] = useState<number | null>(null);
+  const [resistanceAgilite, setResistanceAgilite] = useState(0);
+  const [resistanceAgiliteMax, setResistanceAgiliteMax] = useState<number | null>(null);
 
   // Arme
   const [chanceCritBase, setChanceCritBase] = useState(0.05);
@@ -114,6 +122,10 @@ const EquipementDetailPage: React.FC = () => {
       setBonusPM(data.bonusPM); setBonusPMMax(data.bonusPMMax);
       setBonusPO(data.bonusPO); setBonusPOMax(data.bonusPOMax);
       setBonusCritique(data.bonusCritique); setBonusCritiqueMax(data.bonusCritiqueMax);
+      setResistanceForce(data.resistanceForce ?? 0); setResistanceForceMax(data.resistanceForceMax ?? null);
+      setResistanceIntelligence(data.resistanceIntelligence ?? 0); setResistanceIntelligenceMax(data.resistanceIntelligenceMax ?? null);
+      setResistanceDexterite(data.resistanceDexterite ?? 0); setResistanceDexteriteMax(data.resistanceDexteriteMax ?? null);
+      setResistanceAgilite(data.resistanceAgilite ?? 0); setResistanceAgiliteMax(data.resistanceAgiliteMax ?? null);
       if (data.slot === 'ARME') {
         setChanceCritBase(data.chanceCritBase ?? 0.05);
         setBonusCrit(data.bonusCrit ?? 0);
@@ -159,6 +171,10 @@ const EquipementDetailPage: React.FC = () => {
       bonusVie, bonusVieMax, bonusChance, bonusChanceMax,
       bonusPA, bonusPAMax, bonusPM, bonusPMMax, bonusPO, bonusPOMax,
       bonusCritique, bonusCritiqueMax,
+      resistanceForce, resistanceForceMax,
+      resistanceIntelligence, resistanceIntelligenceMax,
+      resistanceDexterite, resistanceDexteriteMax,
+      resistanceAgilite, resistanceAgiliteMax,
     });
     await load();
     setSaving(false);
@@ -232,6 +248,13 @@ const EquipementDetailPage: React.FC = () => {
     ['PM', bonusPM, setBonusPM, bonusPMMax, setBonusPMMax],
     ['PO', bonusPO, setBonusPO, bonusPOMax, setBonusPOMax],
     ['Critique %', bonusCritique, setBonusCritique, bonusCritiqueMax, setBonusCritiqueMax],
+  ];
+
+  const resistanceRows: [string, number, (v: number) => void, number | null, (v: number | null) => void][] = [
+    ['Résist. Force', resistanceForce, setResistanceForce, resistanceForceMax, setResistanceForceMax],
+    ['Résist. Intelligence', resistanceIntelligence, setResistanceIntelligence, resistanceIntelligenceMax, setResistanceIntelligenceMax],
+    ['Résist. Dextérité', resistanceDexterite, setResistanceDexterite, resistanceDexteriteMax, setResistanceDexteriteMax],
+    ['Résist. Agilité', resistanceAgilite, setResistanceAgilite, resistanceAgiliteMax, setResistanceAgiliteMax],
   ];
 
   return (
@@ -397,6 +420,22 @@ const EquipementDetailPage: React.FC = () => {
                   style={{ padding: '4px 6px', background: 'var(--bg-light)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontSize: 13 }} />
                 <span style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>→</span>
                 <input type="number" value={maxVal ?? ''} placeholder="—"
+                  onChange={e => setMaxVal(e.target.value ? Number(e.target.value) : null)}
+                  style={{ padding: '4px 6px', background: 'var(--bg-light)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontSize: 13 }} />
+              </div>
+            ))}
+            <div style={{ gridColumn: '1 / -1', borderTop: '1px solid var(--border)', marginTop: 8, paddingTop: 8 }}>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 1 }}>
+                Résistances aux dégâts
+              </span>
+            </div>
+            {resistanceRows.map(([label, val, setVal, maxVal, setMaxVal]) => (
+              <div key={label} style={{ display: 'grid', gridTemplateColumns: '100px 1fr 20px 1fr', gap: 6, alignItems: 'center' }}>
+                <span style={{ fontSize: 13 }}>{label}</span>
+                <input type="number" min={0} max={75} value={val} onChange={e => setVal(Number(e.target.value))}
+                  style={{ padding: '4px 6px', background: 'var(--bg-light)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontSize: 13 }} />
+                <span style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>→</span>
+                <input type="number" min={0} max={75} value={maxVal ?? ''} placeholder="—"
                   onChange={e => setMaxVal(e.target.value ? Number(e.target.value) : null)}
                   style={{ padding: '4px 6px', background: 'var(--bg-light)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontSize: 13 }} />
               </div>

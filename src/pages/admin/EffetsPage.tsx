@@ -20,7 +20,7 @@ const EffetsPage: React.FC = () => {
       key: 'type',
       header: 'Type',
       render: (item) => {
-        const cls = item.type === 'DISPEL' ? 'badge-dispel' : item.type === 'BUFF' ? 'badge-success' : item.type === 'POISON' ? 'badge-poison' : (item.type === 'POUSSEE' || item.type === 'ATTIRANCE') ? 'badge-movement' : item.type === 'BOUCLIER' ? 'badge-info' : 'badge-danger';
+        const cls = item.type === 'DISPEL' ? 'badge-dispel' : item.type === 'BUFF' ? 'badge-success' : item.type === 'POISON' ? 'badge-poison' : (item.type === 'POUSSEE' || item.type === 'ATTIRANCE') ? 'badge-movement' : item.type === 'BOUCLIER' ? 'badge-info' : item.type === 'RESISTANCE' ? (item.valeur >= 0 ? 'badge-info' : 'badge-danger') : 'badge-danger';
         return (
           <>
             <span className={`badge ${cls}`}>{item.type}</span>
@@ -53,6 +53,7 @@ const EffetsPage: React.FC = () => {
         { value: 'ATTIRANCE', label: 'Attirance' },
         { value: 'POISON', label: 'Poison' },
         { value: 'BOUCLIER', label: 'Bouclier' },
+        { value: 'RESISTANCE', label: 'Résistance (±%)' },
       ],
     },
     {

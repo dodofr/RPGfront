@@ -36,6 +36,10 @@ const MonstreDetailPage: React.FC = () => {
   });
   const [rewards, setRewards] = useState({ xpRecompense: 0, orMin: 0, orMax: 0 });
   const [pvScaling, setPvScaling] = useState<number>(0.5);
+  const [resistances, setResistances] = useState({
+    resistanceForce: 0, resistanceIntelligence: 0,
+    resistanceDexterite: 0, resistanceAgilite: 0,
+  });
 
   // Sorts
   const [addSortId, setAddSortId] = useState<number>(0);
@@ -71,6 +75,12 @@ const MonstreDetailPage: React.FC = () => {
       });
       setRewards({ xpRecompense: data.xpRecompense, orMin: data.orMin, orMax: data.orMax });
       if (data.pvScalingInvocation !== null) setPvScaling(data.pvScalingInvocation ?? 0.5);
+      setResistances({
+        resistanceForce: data.resistanceForce ?? 0,
+        resistanceIntelligence: data.resistanceIntelligence ?? 0,
+        resistanceDexterite: data.resistanceDexterite ?? 0,
+        resistanceAgilite: data.resistanceAgilite ?? 0,
+      });
     } finally {
       setLoading(false);
     }
@@ -104,6 +114,14 @@ const MonstreDetailPage: React.FC = () => {
     const payload: Record<string, number> = { ...rewards };
     if (isInvocation) payload.pvScalingInvocation = pvScaling;
     await monstresApi.update(monstre.id, payload);
+    await load();
+    setSaving(false);
+  };
+
+  const handleSaveResistances = async () => {
+    if (!monstre) return;
+    setSaving(true);
+    await monstresApi.update(monstre.id, resistances);
     await load();
     setSaving(false);
   };
@@ -250,6 +268,38 @@ const MonstreDetailPage: React.FC = () => {
                   onChange={e => setPvScaling(Number(e.target.value))} />
               </div>
             )}
+          </div>
+        </div>
+
+        {/* Résistances */}
+        <div className="detail-page-section">
+          <div className="detail-page-section-header">
+            <h3>Résistances</h3>
+            <button className="btn btn-sm btn-primary" onClick={handleSaveResistances} disabled={saving}>Sauvegarder</button>
+          </div>
+          <div className="detail-page-fields">
+            {([
+              ['Force', 'resistanceForce'],
+              ['Intelligence', 'resistanceIntelligence'],
+              ['Dextérité', 'resistanceDexterite'],
+              ['Agilité', 'resistanceAgilite'],
+            ] as [string, keyof typeof resistances][]).map(([label, key]) => (
+              <div key={key} className="detail-page-field">
+                <label>Résist. {label}</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <input
+                    type="number" min={0} max={75} value={resistances[key]}
+                    onChange={e => setResistances(p => ({ ...p, [key]: Number(e.target.value) }))}
+                  />
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                    {Math.min(75, resistances[key])}% réd.
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8 }}>
+            Valeur directement en % (0-75). Ex : 50 → 50% de réduction | 75 = cap max
           </div>
         </div>
 

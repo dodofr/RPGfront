@@ -65,6 +65,26 @@ const ZONE_LABELS: Record<string, string> = {
   CONE_INVERSE: 'Cône inv.',
 };
 
+const RESIST_STATS = [
+  ['FOR', 'FORCE'],
+  ['INT', 'INTELLIGENCE'],
+  ['DEX', 'DEXTERITE'],
+  ['AGI', 'AGILITE'],
+] as const;
+
+function calcEffectiveResistance(
+  entiteId: number,
+  entity: { resistanceForce: number; resistanceIntelligence: number; resistanceDexterite: number; resistanceAgilite: number },
+  stat: 'FORCE' | 'INTELLIGENCE' | 'DEXTERITE' | 'AGILITE',
+  effetsActifs: EffetActif[]
+): number {
+  const base = { FORCE: entity.resistanceForce, INTELLIGENCE: entity.resistanceIntelligence, DEXTERITE: entity.resistanceDexterite, AGILITE: entity.resistanceAgilite }[stat];
+  const modifier = effetsActifs
+    .filter(e => e.entiteId === entiteId && e.type === 'RESISTANCE' && e.statCiblee === stat)
+    .reduce((sum, e) => sum + e.valeur, 0);
+  return base + modifier;
+}
+
 const CombatPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -223,8 +243,10 @@ const CombatPage: React.FC = () => {
     if (!currentEntity || !isPlayerTurn) return new Set<string>();
     if (!selectedSort && !weaponMode) return new Set<string>();
 
-    const porteeMin = selectedSort ? selectedSort.porteeMin : armeData?.porteeMin ?? 1;
-    const porteeMax = selectedSort ? selectedSort.porteeMax : armeData?.porteeMax ?? 1;
+    const porteeModifiable = selectedSort ? (selectedSort.porteeModifiable !== false) : true;
+    const poBonus = porteeModifiable ? (currentEntity.poBonus ?? 0) : 0;
+    const porteeMin = Math.max(0, (selectedSort ? selectedSort.porteeMin : armeData?.porteeMin ?? 1) - poBonus);
+    const porteeMax = (selectedSort ? selectedSort.porteeMax : armeData?.porteeMax ?? 1) + poBonus;
     const needLos = selectedSort ? selectedSort.ligneDeVue : armeData?.ligneDeVue ?? true;
     const isLigneDirecte = selectedSort?.ligneDirecte ?? false;
 
@@ -284,10 +306,11 @@ const CombatPage: React.FC = () => {
     if (!needLos) {
       // For teleportation: show occupied and bloqueDeplacement cells as "blocked range"
       if (selectedSort?.estTeleportation) {
+        const tpPoBonus = (selectedSort.porteeModifiable !== false) ? (currentEntity.poBonus ?? 0) : 0;
         const allInRange = getCellsInRange(
           currentEntity.position,
-          selectedSort.porteeMin,
-          selectedSort.porteeMax,
+          Math.max(0, selectedSort.porteeMin - tpPoBonus),
+          selectedSort.porteeMax + tpPoBonus,
           combat.grille.largeur,
           combat.grille.hauteur
         );
@@ -304,8 +327,10 @@ const CombatPage: React.FC = () => {
       return new Set<string>();
     }
 
-    const porteeMin = selectedSort ? selectedSort.porteeMin : armeData?.porteeMin ?? 1;
-    const porteeMax = selectedSort ? selectedSort.porteeMax : armeData?.porteeMax ?? 1;
+    const blockedPorteeModifiable = selectedSort ? (selectedSort.porteeModifiable !== false) : true;
+    const blockedPoBonus = blockedPorteeModifiable ? (currentEntity.poBonus ?? 0) : 0;
+    const porteeMin = Math.max(0, (selectedSort ? selectedSort.porteeMin : armeData?.porteeMin ?? 1) - blockedPoBonus);
+    const porteeMax = (selectedSort ? selectedSort.porteeMax : armeData?.porteeMax ?? 1) + blockedPoBonus;
     const isLigneDirecte = selectedSort?.ligneDirecte ?? false;
 
     let allInRange = getCellsInRange(
@@ -443,8 +468,8 @@ const CombatPage: React.FC = () => {
         degatsCritMax: selectedSort.degatsCritMax,
         chanceCritBase: selectedSort.chanceCritBase,
         tauxEchec: selectedSort.tauxEchec,
-        porteeMin: selectedSort.porteeMin,
-        porteeMax: selectedSort.porteeMax,
+        porteeMin: Math.max(0, selectedSort.porteeMin - ((selectedSort.porteeModifiable !== false) ? (currentEntity?.poBonus ?? 0) : 0)),
+        porteeMax: selectedSort.porteeMax + ((selectedSort.porteeModifiable !== false) ? (currentEntity?.poBonus ?? 0) : 0),
         statUtilisee: selectedSort.statUtilisee,
         zone: selectedSort.zone,
         cooldown: selectedSort.cooldown,
@@ -577,13 +602,37 @@ const CombatPage: React.FC = () => {
                   <div className="stat-row"><span className="label">AGI</span><span>{ent.stats.agilite}</span></div>
                   <div className="stat-row"><span className="label">VIE</span><span>{ent.stats.vie}</span></div>
                   <div className="stat-row"><span className="label">CHA</span><span>{ent.stats.chance}</span></div>
+                  {(() => {
+                    const allEffets = combat.effetsActifs || [];
+                    const resistRows = RESIST_STATS
+                      .map(([label, stat]) => [label, calcEffectiveResistance(ent.id, ent, stat, allEffets)] as [string, number])
+                      .filter(([, v]) => v !== 0);
+                    if (resistRows.length === 0) return null;
+                    return (
+                      <div style={{ marginTop: 4, paddingTop: 4, borderTop: '1px solid var(--border)' }}>
+                        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>Résistances</div>
+                        {resistRows.map(([label, val]) => (
+                          <div key={label} className="stat-row">
+                            <span className="label">r{label}</span>
+                            <span style={{ color: val > 0 ? 'var(--success)' : 'var(--danger)' }}>
+                              {val > 0 ? '+' : ''}{val}%
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
                   {effects.length > 0 && (
                     <div className="effects-list">
                       {effects.map(ef => {
                         const isPoisonEf = ef.type === 'POISON';
+                        const isResistEf = ef.type === 'RESISTANCE';
+                        const STAT_ABBR: Record<string, string> = { FORCE: 'FOR', INTELLIGENCE: 'INT', DEXTERITE: 'DEX', AGILITE: 'AGI' };
                         const detail = isPoisonEf
                           ? `${ef.valeurMin ?? ef.valeur}-${ef.valeur} dgts/tour`
-                          : `${STAT_LABELS[ef.statCiblee] || ef.statCiblee} ${ef.valeur > 0 ? '+' : ''}${ef.valeur}`;
+                          : isResistEf
+                            ? `r${STAT_ABBR[ef.statCiblee] || ef.statCiblee} ${ef.valeur > 0 ? '+' : ''}${ef.valeur}%`
+                            : `${STAT_LABELS[ef.statCiblee] || ef.statCiblee} ${ef.valeur > 0 ? '+' : ''}${ef.valeur}`;
                         return (
                           <span key={ef.id} className={`effect-tag ${ef.type?.toLowerCase() || ''}`}
                             title={detail}>
@@ -746,7 +795,9 @@ const CombatPage: React.FC = () => {
                           <span className="spell-effect-detail">
                             {ef.type === 'POISON'
                               ? `${ef.valeurMin ?? ef.valeur}-${ef.valeur} dgts/tour`
-                              : `${STAT_LABELS[ef.statCiblee] || ef.statCiblee} ${ef.valeur > 0 ? '+' : ''}${ef.valeur}`}
+                              : ef.type === 'RESISTANCE'
+                                ? `r${{ FORCE: 'FOR', INTELLIGENCE: 'INT', DEXTERITE: 'DEX', AGILITE: 'AGI' }[ef.statCiblee] || ef.statCiblee} ${ef.valeur > 0 ? '+' : ''}${ef.valeur}%`
+                                : `${STAT_LABELS[ef.statCiblee] || ef.statCiblee} ${ef.valeur > 0 ? '+' : ''}${ef.valeur}`}
                           </span>
                           <span className="spell-effect-meta">
                             {ef.duree}t | {Math.round(ef.chanceDeclenchement * 100)}% | {ef.surCible ? 'cible' : 'lanceur'}
@@ -868,13 +919,33 @@ const CombatPage: React.FC = () => {
                         <div className="tooltip-team">
                           {entity.invocateurId ? 'Invocation' : entity.equipe === 0 ? 'Joueur' : 'Ennemi'}
                         </div>
+                        {(() => {
+                          const allEffets = combat.effetsActifs || [];
+                          const resistRows = RESIST_STATS
+                            .map(([label, stat]) => [`r${label}`, calcEffectiveResistance(entity.id, entity, stat, allEffets)] as [string, number])
+                            .filter(([, v]) => v !== 0);
+                          if (resistRows.length === 0) return null;
+                          return (
+                            <div className="tooltip-resistances">
+                              {resistRows.map(([label, val]) => (
+                                <span key={label} className="tooltip-resist" style={{ color: val > 0 ? undefined : '#ff6b6b' }}>
+                                  {label} {val > 0 ? '+' : ''}{val}%
+                                </span>
+                              ))}
+                            </div>
+                          );
+                        })()}
                         {hoveredEffects.length > 0 && (
                           <div className="tooltip-effects">
                             {hoveredEffects.map(ef => {
                               const isPoisonEf = ef.type === 'POISON';
+                              const isResistEf = ef.type === 'RESISTANCE';
+                              const STAT_ABBR: Record<string, string> = { FORCE: 'FOR', INTELLIGENCE: 'INT', DEXTERITE: 'DEX', AGILITE: 'AGI' };
                               const detail = isPoisonEf
                                 ? `${ef.valeurMin ?? ef.valeur}-${ef.valeur} dgts/tour`
-                                : `${STAT_LABELS[ef.statCiblee] || ef.statCiblee} ${ef.valeur > 0 ? '+' : ''}${ef.valeur}`;
+                                : isResistEf
+                                  ? `r${STAT_ABBR[ef.statCiblee] || ef.statCiblee} ${ef.valeur > 0 ? '+' : ''}${ef.valeur}%`
+                                  : `${STAT_LABELS[ef.statCiblee] || ef.statCiblee} ${ef.valeur > 0 ? '+' : ''}${ef.valeur}`;
                               return (
                                 <span key={ef.id} className={`tooltip-effect ${ef.type?.toLowerCase() || ''}`}>
                                   {ef.nom || `Effet #${ef.effetId}`} ({ef.toursRestants}t)

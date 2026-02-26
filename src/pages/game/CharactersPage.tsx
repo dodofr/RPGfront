@@ -10,8 +10,52 @@ import ConfirmDialog from '../../components/ConfirmDialog';
 import '../../styles/admin.css';
 
 // Normalize effect from either flat (combat) or nested (API) format
-const getEffetNom = (e: NonNullable<Sort['effets']>[number]) => e.nom || e.effet?.nom || '';
-const getEffetType = (e: NonNullable<Sort['effets']>[number]) => e.type || e.effet?.type || '';
+type EffetEntry = NonNullable<Sort['effets']>[number];
+const getEffetType = (e: EffetEntry) => e.type || e.effet?.type || '';
+function normalizeEffet(e: EffetEntry) {
+  return {
+    type: (e.type || e.effet?.type || '') as string,
+    statCiblee: (e.statCiblee || e.effet?.statCiblee || '') as string,
+    valeur: (e.valeur ?? e.effet?.valeur ?? 0) as number,
+    valeurMin: (e.valeurMin ?? e.effet?.valeurMin ?? null) as number | null,
+    duree: (e.duree ?? e.effet?.duree ?? 0) as number,
+    chanceDeclenchement: (e.chanceDeclenchement ?? 1) as number,
+  };
+}
+function formatEffetBadge(e: EffetEntry): string {
+  const { type, statCiblee, valeur, valeurMin, duree, chanceDeclenchement } = normalizeEffet(e);
+  const stat = STAT_ABBR[statCiblee] ?? statCiblee;
+  const chance = chanceDeclenchement < 1 ? `${Math.round(chanceDeclenchement * 100)}% ` : '';
+  switch (type) {
+    case 'BUFF':     return `${chance}+${valeur} ${stat} (${duree}t)`;
+    case 'DEBUFF':   return `${chance}${valeur} ${stat} (${duree}t)`;
+    case 'POISON':   return `${chance}${valeurMin ?? 0}-${valeur}/t (${duree}t)`;
+    case 'POUSSEE':  return `${chance}Pousse ${valeur}c`;
+    case 'ATTIRANCE':return `${chance}Attire ${valeur}c`;
+    case 'BOUCLIER':   return `${chance}Bouclier ${valeur} (${duree}t)`;
+    case 'RESISTANCE': return `${chance}r${stat} ${valeur > 0 ? '+' : ''}${valeur}% (${duree}t)`;
+    case 'DISPEL':     return 'Dispel';
+    default:           return type;
+  }
+}
+
+const STAT_COLORS: Record<string, string> = {
+  FORCE: '#ef5350',
+  INTELLIGENCE: '#42a5f5',
+  DEXTERITE: '#ffca28',
+  AGILITE: '#66bb6a',
+  VIE: '#ec407a',
+  CHANCE: '#ab47bc',
+};
+const STAT_ABBR: Record<string, string> = {
+  FORCE: 'FOR', INTELLIGENCE: 'INT', DEXTERITE: 'DEX',
+  AGILITE: 'AGI', VIE: 'VIE', CHANCE: 'CHA',
+};
+const ZONE_ABBR: Record<string, string> = {
+  CASE: 'Case', CROIX: 'Croix', LIGNE: 'Ligne', CONE: 'Cône',
+  CERCLE: 'Cercle', LIGNE_PERPENDICULAIRE: 'L.Perp', DIAGONALE: 'Diag',
+  CARRE: 'Carré', ANNEAU: 'Anneau', CONE_INVERSE: 'Cône inv.',
+};
 
 const SLOTS: { key: SlotType; label: string }[] = [
   { key: 'ARME', label: 'Arme' },
@@ -265,14 +309,30 @@ const CharactersPage: React.FC<CharactersPageProps> = ({ playerId: playerIdProp 
         <div className="char-detail">
           <h2>{selected.nom} - Niveau {selected.niveau}</h2>
           <p className="char-meta">
-            Race: {selected.race?.nom} | XP: {selected.experience} | Points disponibles: {selected.pointsStatsDisponibles}
+            Race: {selected.race?.nom} | XP: {selected.experience} / {selected.niveau * selected.niveau * 50} | Points disponibles: {selected.pointsStatsDisponibles}
           </p>
 
           {/* Stats Section */}
           <h3 className="section-title">Stats</h3>
           <div className="detail-sections">
             <div className="detail-section">
-              <h4>Stats de base</h4>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                <h4 style={{ margin: 0 }}>Stats de base</h4>
+                {(selected.force > 10 || selected.intelligence > 10 || selected.dexterite > 10 ||
+                  selected.agilite > 10 || selected.vie > 10 || selected.chance > 10) && (
+                  <button
+                    className="btn btn-sm btn-warning"
+                    style={{ fontSize: 11 }}
+                    onClick={async () => {
+                      if (!confirm('Réinitialiser toutes les stats à 10 et récupérer les points ?')) return;
+                      await charactersApi.resetStats(selected.id);
+                      selectChar(selected.id);
+                    }}
+                  >
+                    Réinitialiser
+                  </button>
+                )}
+              </div>
               <div className="stat-grid">
                 {STAT_KEYS.map(stat => (
                   <div key={stat} className="stat-row">
@@ -327,6 +387,32 @@ const CharactersPage: React.FC<CharactersPageProps> = ({ playerId: playerIdProp 
                     <span className="stat-label">Critique</span>
                     <span className="stat-value">{selected.totalStats.bonusCritique}%</span>
                   </div>
+                  {(selected.totalStats.resistanceForce > 0 || selected.totalStats.resistanceIntelligence > 0 ||
+                    selected.totalStats.resistanceDexterite > 0 || selected.totalStats.resistanceAgilite > 0) && (
+                    <>
+                      <div className="stat-row" style={{ borderTop: '1px solid var(--border)', paddingTop: 4 }}>
+                        <span className="stat-label" style={{ fontStyle: 'italic', gridColumn: '1/-1' }}>Résistances</span>
+                      </div>
+                      {([
+                        ['rFOR', selected.totalStats.resistanceForce],
+                        ['rINT', selected.totalStats.resistanceIntelligence],
+                        ['rDEX', selected.totalStats.resistanceDexterite],
+                        ['rAGI', selected.totalStats.resistanceAgilite],
+                      ] as [string, number][])
+                        .filter(([, v]) => v > 0)
+                        .map(([label, val]) => (
+                          <div key={label} className="stat-row">
+                            <span className="stat-label">{label}</span>
+                            <span className="stat-value">
+                              {val}%
+                              <span style={{ fontSize: 10, color: 'var(--text-muted)', marginLeft: 4 }}>
+                                réd.
+                              </span>
+                            </span>
+                          </div>
+                        ))}
+                    </>
+                  )}
                 </div>
               </div>
             )}
@@ -356,35 +442,50 @@ const CharactersPage: React.FC<CharactersPageProps> = ({ playerId: playerIdProp 
           </div>
           {spells.length > 0 ? (
             <div className="sort-list">
-              {spells.map(s => (
-                <div key={s.id} className="sort-item">
-                  <div>
-                    <span className="sort-name">{s.nom}</span>
-                    {s.description && (
-                      <span style={{ color: 'var(--text-muted)', fontSize: 12, marginLeft: 8 }}>{s.description}</span>
-                    )}
-                  </div>
-                  <div className="sort-meta">
-                    <span>{s.coutPA} PA</span>
-                    <span>{s.degatsMin}-{s.degatsMax} dmg</span>
-                    <span>{s.porteeMin}-{s.porteeMax} po</span>
-                    {s.cooldown > 0 && <span>{s.cooldown} CD</span>}
-                    {s.estSoin && <span style={{ color: 'var(--success)' }}>Soin</span>}
-                    {s.estInvocation && <span style={{ color: 'var(--warning)' }}>Invoc.</span>}
-                    {s.estVolDeVie && <span style={{ color: '#00c853' }}>Vol de vie</span>}
-                    {s.tauxEchec > 0 && <span style={{ color: 'var(--danger)' }}>Echec {Math.round(s.tauxEchec * 100)}%</span>}
-                    {s.effets && s.effets.length > 0 && (
-                      <span className="effect-badges">
-                        {s.effets.map((e, i) => (
-                          <span key={i} className={`effect-badge ${getEffetType(e) === 'BUFF' ? 'buff' : getEffetType(e) === 'POISON' ? 'poison' : (getEffetType(e) === 'POUSSEE' || getEffetType(e) === 'ATTIRANCE') ? 'movement' : getEffetType(e) === 'DISPEL' ? 'dispel' : 'debuff'}`}>
-                            {getEffetNom(e)}
-                          </span>
-                        ))}
+              {spells.map(s => {
+                const statColor = STAT_COLORS[s.statUtilisee] ?? 'var(--text-muted)';
+                const statAbbr = STAT_ABBR[s.statUtilisee] ?? s.statUtilisee;
+                const zoneLabel = s.zone ? `${ZONE_ABBR[s.zone.type] ?? s.zone.type}${s.zone.taille > 1 ? ` ${s.zone.taille}` : ''}` : null;
+                const showCrit = !s.estSoin && !s.estInvocation && s.chanceCritBase > 0;
+                return (
+                  <div key={s.id} className="sort-item">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      <span className="sort-name">{s.nom}</span>
+                      <span style={{ background: statColor, color: '#000', fontSize: 11, fontWeight: 700, padding: '1px 5px', borderRadius: 3 }}>
+                        {statAbbr}
                       </span>
-                    )}
+                      {s.estGlyphe && <span style={{ background: '#7e57c2', color: '#fff', fontSize: 11, padding: '1px 5px', borderRadius: 3 }}>Glyphe</span>}
+                      {s.estPiege && <span style={{ background: '#8d6e63', color: '#fff', fontSize: 11, padding: '1px 5px', borderRadius: 3 }}>Piège</span>}
+                      {s.estTeleportation && <span style={{ background: '#00acc1', color: '#fff', fontSize: 11, padding: '1px 5px', borderRadius: 3 }}>Téléport</span>}
+                      {s.ligneDirecte && <span style={{ background: 'var(--border)', color: 'var(--text)', fontSize: 11, padding: '1px 5px', borderRadius: 3 }}>Ligne</span>}
+                      {s.description && (
+                        <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{s.description}</span>
+                      )}
+                    </div>
+                    <div className="sort-meta">
+                      <span>{s.coutPA} PA</span>
+                      {!s.estInvocation && <span>{s.degatsMin}-{s.degatsMax} {s.estSoin ? 'soin' : 'dmg'}</span>}
+                      {showCrit && <span style={{ color: '#ffca28' }}>crit {Math.round(s.chanceCritBase * 100)}% ({s.degatsCritMin}-{s.degatsCritMax})</span>}
+                      <span>{s.porteeMin}-{s.porteeMax} po</span>
+                      {zoneLabel && zoneLabel !== 'Case' && <span style={{ color: 'var(--info)' }}>{zoneLabel}</span>}
+                      {s.cooldown > 0 && <span>{s.cooldown} CD</span>}
+                      {s.estSoin && <span style={{ color: 'var(--success)' }}>Soin</span>}
+                      {s.estInvocation && <span style={{ color: 'var(--warning)' }}>Invoc.</span>}
+                      {s.estVolDeVie && <span style={{ color: '#00c853' }}>Vol de vie</span>}
+                      {s.tauxEchec > 0 && <span style={{ color: 'var(--danger)' }}>Echec {Math.round(s.tauxEchec * 100)}%</span>}
+                      {s.effets && s.effets.length > 0 && (
+                        <span className="effect-badges">
+                          {s.effets.map((e, i) => (
+                            <span key={i} className={`effect-badge ${getEffetType(e) === 'BUFF' ? 'buff' : getEffetType(e) === 'POISON' ? 'poison' : (getEffetType(e) === 'POUSSEE' || getEffetType(e) === 'ATTIRANCE') ? 'movement' : getEffetType(e) === 'DISPEL' ? 'dispel' : (getEffetType(e) === 'BOUCLIER' || (getEffetType(e) === 'RESISTANCE' && (normalizeEffet(e).valeur ?? 0) > 0)) ? 'buff' : 'debuff'}`}>
+                              {formatEffetBadge(e)}
+                            </span>
+                          ))}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Aucun sort appris</div>
@@ -416,6 +517,10 @@ const CharactersPage: React.FC<CharactersPageProps> = ({ playerId: playerIdProp 
                           inst.bonusPM > 0 && `PM +${inst.bonusPM}`,
                           inst.bonusPO > 0 && `PO +${inst.bonusPO}`,
                           inst.bonusCritique > 0 && `CRI +${inst.bonusCritique}%`,
+                          inst.resistanceForce > 0 && `rFOR +${inst.resistanceForce}`,
+                          inst.resistanceIntelligence > 0 && `rINT +${inst.resistanceIntelligence}`,
+                          inst.resistanceDexterite > 0 && `rDEX +${inst.resistanceDexterite}`,
+                          inst.resistanceAgilite > 0 && `rAGI +${inst.resistanceAgilite}`,
                         ].filter(Boolean).join(', ') || 'Aucun bonus stats'
                         : 'Aucun bonus stats'}
                       </div>
