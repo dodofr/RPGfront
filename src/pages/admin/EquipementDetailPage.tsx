@@ -76,6 +76,10 @@ const EquipementDetailPage: React.FC = () => {
   const [resistanceDexteriteMax, setResistanceDexteriteMax] = useState<number | null>(null);
   const [resistanceAgilite, setResistanceAgilite] = useState(0);
   const [resistanceAgiliteMax, setResistanceAgiliteMax] = useState<number | null>(null);
+  const [bonusDommages, setBonusDommages] = useState(0);
+  const [bonusDommagesMax, setBonusDommagesMax] = useState<number | null>(null);
+  const [bonusSoins, setBonusSoins] = useState(0);
+  const [bonusSoinsMax, setBonusSoinsMax] = useState<number | null>(null);
 
   // Arme
   const [chanceCritBase, setChanceCritBase] = useState(0.05);
@@ -126,6 +130,8 @@ const EquipementDetailPage: React.FC = () => {
       setResistanceIntelligence(data.resistanceIntelligence ?? 0); setResistanceIntelligenceMax(data.resistanceIntelligenceMax ?? null);
       setResistanceDexterite(data.resistanceDexterite ?? 0); setResistanceDexteriteMax(data.resistanceDexteriteMax ?? null);
       setResistanceAgilite(data.resistanceAgilite ?? 0); setResistanceAgiliteMax(data.resistanceAgiliteMax ?? null);
+      setBonusDommages(data.bonusDommages ?? 0); setBonusDommagesMax(data.bonusDommagesMax ?? null);
+      setBonusSoins(data.bonusSoins ?? 0); setBonusSoinsMax(data.bonusSoinsMax ?? null);
       if (data.slot === 'ARME') {
         setChanceCritBase(data.chanceCritBase ?? 0.05);
         setBonusCrit(data.bonusCrit ?? 0);
@@ -175,6 +181,8 @@ const EquipementDetailPage: React.FC = () => {
       resistanceIntelligence, resistanceIntelligenceMax,
       resistanceDexterite, resistanceDexteriteMax,
       resistanceAgilite, resistanceAgiliteMax,
+      bonusDommages, bonusDommagesMax,
+      bonusSoins, bonusSoinsMax,
     });
     await load();
     setSaving(false);
@@ -255,6 +263,8 @@ const EquipementDetailPage: React.FC = () => {
     ['Résist. Intelligence', resistanceIntelligence, setResistanceIntelligence, resistanceIntelligenceMax, setResistanceIntelligenceMax],
     ['Résist. Dextérité', resistanceDexterite, setResistanceDexterite, resistanceDexteriteMax, setResistanceDexteriteMax],
     ['Résist. Agilité', resistanceAgilite, setResistanceAgilite, resistanceAgiliteMax, setResistanceAgiliteMax],
+    ['Bonus dégâts', bonusDommages, setBonusDommages, bonusDommagesMax, setBonusDommagesMax],
+    ['Bonus soins', bonusSoins, setBonusSoins, bonusSoinsMax, setBonusSoinsMax],
   ];
 
   return (

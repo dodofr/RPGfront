@@ -50,6 +50,7 @@ const STAT_COLORS: Record<string, string> = {
 const STAT_ABBR: Record<string, string> = {
   FORCE: 'FOR', INTELLIGENCE: 'INT', DEXTERITE: 'DEX',
   AGILITE: 'AGI', VIE: 'VIE', CHANCE: 'CHA',
+  DOMMAGES: 'DMG', SOINS: 'SOIN',
 };
 const ZONE_ABBR: Record<string, string> = {
   CASE: 'Case', CROIX: 'Croix', LIGNE: 'Ligne', CONE: 'Cône',
@@ -413,6 +414,25 @@ const CharactersPage: React.FC<CharactersPageProps> = ({ playerId: playerIdProp 
                         ))}
                     </>
                   )}
+                  {(selected.totalStats.bonusDommages > 0 || selected.totalStats.bonusSoins > 0) && (
+                    <>
+                      <div className="stat-row" style={{ borderTop: '1px solid var(--border)', paddingTop: 4 }}>
+                        <span className="stat-label" style={{ fontStyle: 'italic', gridColumn: '1/-1' }}>Bonus combat</span>
+                      </div>
+                      {selected.totalStats.bonusDommages > 0 && (
+                        <div className="stat-row">
+                          <span className="stat-label">DMG+</span>
+                          <span className="stat-value">+{selected.totalStats.bonusDommages}</span>
+                        </div>
+                      )}
+                      {selected.totalStats.bonusSoins > 0 && (
+                        <div className="stat-row">
+                          <span className="stat-label">SOIN+</span>
+                          <span className="stat-value">+{selected.totalStats.bonusSoins}</span>
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
               </div>
             )}
@@ -521,6 +541,8 @@ const CharactersPage: React.FC<CharactersPageProps> = ({ playerId: playerIdProp 
                           inst.resistanceIntelligence > 0 && `rINT +${inst.resistanceIntelligence}`,
                           inst.resistanceDexterite > 0 && `rDEX +${inst.resistanceDexterite}`,
                           inst.resistanceAgilite > 0 && `rAGI +${inst.resistanceAgilite}`,
+                          inst.bonusDommages > 0 && `DMG +${inst.bonusDommages}`,
+                          inst.bonusSoins > 0 && `SOIN +${inst.bonusSoins}`,
                         ].filter(Boolean).join(', ') || 'Aucun bonus stats'
                         : 'Aucun bonus stats'}
                       </div>

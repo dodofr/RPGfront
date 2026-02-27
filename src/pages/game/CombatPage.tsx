@@ -45,6 +45,8 @@ const STAT_LABELS: Record<string, string> = {
   DEXTERITE: 'Dextérité',
   AGILITE: 'Agilité',
   VIE: 'Vie',
+  DOMMAGES: 'Dégâts',
+  SOINS: 'Soins',
   CHANCE: 'Chance',
   PA: 'PA',
   PM: 'PM',
@@ -622,6 +624,23 @@ const CombatPage: React.FC = () => {
                       </div>
                     );
                   })()}
+                  {((ent.bonusDommages ?? 0) > 0 || (ent.bonusSoins ?? 0) > 0) && (
+                    <div style={{ marginTop: 4, paddingTop: 4, borderTop: '1px solid var(--border)' }}>
+                      <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>Bonus combat</div>
+                      {(ent.bonusDommages ?? 0) > 0 && (
+                        <div className="stat-row">
+                          <span className="label">DMG+</span>
+                          <span style={{ color: 'var(--success)' }}>+{ent.bonusDommages}</span>
+                        </div>
+                      )}
+                      {(ent.bonusSoins ?? 0) > 0 && (
+                        <div className="stat-row">
+                          <span className="label">SOIN+</span>
+                          <span style={{ color: 'var(--success)' }}>+{ent.bonusSoins}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                   {effects.length > 0 && (
                     <div className="effects-list">
                       {effects.map(ef => {

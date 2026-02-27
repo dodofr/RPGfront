@@ -72,6 +72,8 @@ const EffetsPage: React.FC = () => {
         { value: 'PM', label: 'PM' },
         { value: 'PO', label: 'PO' },
         { value: 'CRITIQUE', label: 'Critique' },
+        { value: 'DOMMAGES', label: 'Dégâts' },
+        { value: 'SOINS', label: 'Soins' },
       ],
     },
     { name: 'valeurMin', label: 'Valeur min (poison)', type: 'number', required: false },

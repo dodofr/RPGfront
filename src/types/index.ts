@@ -1,5 +1,5 @@
 // Enums
-export type StatType = 'FORCE' | 'INTELLIGENCE' | 'DEXTERITE' | 'AGILITE' | 'VIE' | 'CHANCE' | 'PA' | 'PM' | 'PO' | 'CRITIQUE';
+export type StatType = 'FORCE' | 'INTELLIGENCE' | 'DEXTERITE' | 'AGILITE' | 'VIE' | 'CHANCE' | 'PA' | 'PM' | 'PO' | 'CRITIQUE' | 'DOMMAGES' | 'SOINS';
 export type SortType = 'ARME' | 'SORT';
 export type SlotType = 'ARME' | 'COIFFE' | 'AMULETTE' | 'BOUCLIER' | 'HAUT' | 'BAS' | 'ANNEAU1' | 'ANNEAU2' | 'FAMILIER';
 export type EffetType = 'BUFF' | 'DEBUFF' | 'DISPEL' | 'POUSSEE' | 'ATTIRANCE' | 'POISON' | 'BOUCLIER' | 'RESISTANCE';
@@ -128,6 +128,10 @@ export interface Equipment {
   resistanceIntelligenceMax: number | null;
   resistanceDexteriteMax: number | null;
   resistanceAgiliteMax: number | null;
+  bonusDommages: number;
+  bonusDommagesMax: number | null;
+  bonusSoins: number;
+  bonusSoinsMax: number | null;
   degatsMin: number | null;
   degatsMax: number | null;
   chanceCritBase: number | null;
@@ -319,6 +323,8 @@ export interface TotalStats {
   resistanceIntelligence: number;
   resistanceDexterite: number;
   resistanceAgilite: number;
+  bonusDommages: number;
+  bonusSoins: number;
 }
 
 export interface Character {
@@ -386,6 +392,8 @@ export interface CombatEntity {
   resistanceIntelligence: number;
   resistanceDexterite: number;
   resistanceAgilite: number;
+  bonusDommages: number;
+  bonusSoins: number;
   sorts?: Sort[];
 }
 
@@ -568,6 +576,8 @@ export interface InventoryItemInstance {
   resistanceIntelligence: number;
   resistanceDexterite: number;
   resistanceAgilite: number;
+  bonusDommages: number;
+  bonusSoins: number;
   estEquipe: boolean;
   panoplieId: number | null;
 }
