@@ -236,8 +236,9 @@ export interface GameMap {
 export interface MapConnection {
   id: number;
   fromMapId: number;
-  toMapId: number;
-  toMap?: { id: number; nom: string; type: MapType };
+  toMapId: number | null;
+  toMap?: { id: number; nom: string; type: MapType } | null;
+  fromMap?: { id: number; nom: string; type: MapType };
   positionX: number;
   positionY: number;
   nom: string;
@@ -613,4 +614,46 @@ export interface InventoryState {
   poidsMax: number;
   or: number;
   setBonuses?: SetBonusInfo[];
+}
+
+export interface MarchandLigne {
+  id: number;
+  pnjId: number;
+  equipementId?: number | null;
+  equipement?: { id: number; nom: string; slot: string } | null;
+  ressourceId?: number | null;
+  ressource?: { id: number; nom: string } | null;
+  prixMarchand?: number | null;
+  prixRachat?: number | null;
+}
+
+export interface PNJ {
+  id: number;
+  nom: string;
+  description?: string | null;
+  mapId: number;
+  map?: { id: number; nom: string; type: MapType };
+  positionX: number;
+  positionY: number;
+  estMarchand: boolean;
+  lignes: MarchandLigne[];
+}
+
+export interface CompetencePassive {
+  id: number;
+  nom: string;
+  description?: string | null;
+  niveauDeblocage: number;
+  bonusForce: number;
+  bonusIntelligence: number;
+  bonusDexterite: number;
+  bonusAgilite: number;
+  bonusVie: number;
+  bonusChance: number;
+  bonusPa: number;
+  bonusPm: number;
+  bonusPo: number;
+  bonusCritique: number;
+  bonusDommages: number;
+  bonusSoins: number;
 }

@@ -15,8 +15,12 @@ export const groupsApi = {
     api.patch(`/groups/${id}/move`, { x, y }).then(r => r.data),
   enterMap: (id: number, mapId: number) =>
     api.post(`/groups/${id}/enter-map`, { mapId }).then(r => r.data),
-  useConnection: (id: number, connectionId: number, difficulte?: number) =>
-    api.post(`/groups/${id}/use-connection`, { connectionId, ...(difficulte ? { difficulte } : {}) }).then(r => r.data),
+  useConnection: (id: number, connectionId: number, difficulte?: number, destinationConnectionId?: number) =>
+    api.post(`/groups/${id}/use-connection`, {
+      connectionId,
+      ...(destinationConnectionId ? { destinationConnectionId } : {}),
+      ...(difficulte ? { difficulte } : {}),
+    }).then(r => r.data),
   moveDirection: (id: number, direction: Direction) =>
     api.post(`/groups/${id}/move-direction`, { direction }).then(r => r.data),
   leaveMap: (id: number) =>

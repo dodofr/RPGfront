@@ -3,8 +3,8 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { charactersApi, recipesApi } from '../../api/characters';
 import { playersApi } from '../../api/players';
 import { groupsApi } from '../../api/groups';
-import { racesApi, equipmentApi } from '../../api/static';
-import type { Character, Player, Race, Sort, Equipment, SlotType, InventoryState, Recette, MapType } from '../../types';
+import { racesApi, equipmentApi, passivesApi } from '../../api/static';
+import type { Character, Player, Race, Sort, Equipment, SlotType, InventoryState, Recette, MapType, CompetencePassive } from '../../types';
 import FormModal, { type FieldDef } from '../../components/FormModal';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import '../../styles/admin.css';
@@ -104,6 +104,7 @@ const CharactersPage: React.FC<CharactersPageProps> = ({ playerId: playerIdProp 
   const [sendResources, setSendResources] = useState<Record<number, number>>({});
   const [sendError, setSendError] = useState<string | null>(null);
   const [recipes, setRecipes] = useState<Recette[]>([]);
+  const [passives, setPassives] = useState<CompetencePassive[]>([]);
   const [mapType, setMapType] = useState<MapType | null>(null);
   const [craftingId, setCraftingId] = useState<number | null>(null);
   const [craftMessage, setCraftMessage] = useState<string | null>(null);
@@ -149,6 +150,11 @@ const CharactersPage: React.FC<CharactersPageProps> = ({ playerId: playerIdProp 
   // Always load recipes (craft accessible depuis la fiche, hors aventure aussi)
   useEffect(() => {
     recipesApi.getAll().then(setRecipes).catch(() => setRecipes([]));
+  }, []);
+
+  // Load all passive skills (to show unlocked ones + next to unlock)
+  useEffect(() => {
+    passivesApi.getAll().then(setPassives).catch(() => setPassives([]));
   }, []);
 
   // Craft always available from character sheet; in adventure it's restricted to VILLE/SAFE
@@ -687,6 +693,57 @@ const CharactersPage: React.FC<CharactersPageProps> = ({ playerId: playerIdProp 
               )}
             </>
           )}
+
+          {/* Passives Section */}
+          {selected && passives.length > 0 && (() => {
+            const unlocked = passives.filter(p => p.niveauDeblocage <= selected.niveau);
+            const next = passives.filter(p => p.niveauDeblocage > selected.niveau).sort((a, b) => a.niveauDeblocage - b.niveauDeblocage)[0];
+            const bonusSummary = (p: CompetencePassive) => {
+              const parts: string[] = [];
+              if (p.bonusForce) parts.push(`FOR +${p.bonusForce}`);
+              if (p.bonusIntelligence) parts.push(`INT +${p.bonusIntelligence}`);
+              if (p.bonusDexterite) parts.push(`DEX +${p.bonusDexterite}`);
+              if (p.bonusAgilite) parts.push(`AGI +${p.bonusAgilite}`);
+              if (p.bonusVie) parts.push(`VIE +${p.bonusVie}`);
+              if (p.bonusChance) parts.push(`CHA +${p.bonusChance}`);
+              if (p.bonusPa) parts.push(`PA +${p.bonusPa}`);
+              if (p.bonusPm) parts.push(`PM +${p.bonusPm}`);
+              if (p.bonusPo) parts.push(`PO +${p.bonusPo}`);
+              if (p.bonusCritique) parts.push(`CRI +${p.bonusCritique}%`);
+              if (p.bonusDommages) parts.push(`DMG +${p.bonusDommages}`);
+              if (p.bonusSoins) parts.push(`SOIN +${p.bonusSoins}`);
+              return parts.join(', ');
+            };
+            return (
+              <>
+                <h3 className="section-title">Compétences passives</h3>
+                <div className="sort-list">
+                  {unlocked.length === 0 ? (
+                    <div style={{ padding: '8px 0', color: 'var(--text-muted)', fontSize: 13 }}>
+                      Aucune passive débloquée.
+                      {next && <span> Prochaine : <strong>{next.nom}</strong> au niveau {next.niveauDeblocage}</span>}
+                    </div>
+                  ) : (
+                    unlocked.map(p => (
+                      <div key={p.id} className="sort-item">
+                        <div>
+                          <span className="sort-name">{p.nom}</span>
+                          <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--text-muted)' }}>niv. {p.niveauDeblocage}</span>
+                          <span className="sort-meta">{bonusSummary(p)}</span>
+                          {p.description && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{p.description}</div>}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                  {unlocked.length > 0 && next && (
+                    <div style={{ padding: '4px 0', color: 'var(--text-muted)', fontSize: 12 }}>
+                      Prochaine : <strong>{next.nom}</strong> au niveau {next.niveauDeblocage}
+                    </div>
+                  )}
+                </div>
+              </>
+            );
+          })()}
 
           {/* Craft Section — only in VILLE/SAFE */}
           {canCraftInTown && inventory && recipes.length > 0 && (

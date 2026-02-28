@@ -1,5 +1,5 @@
 import api from './client';
-import type { Region, GameMap, MonsterTemplate, MonstreDrop, MapCase, MapSpawn } from '../types';
+import type { Region, GameMap, MonsterTemplate, MonstreDrop, MapCase, MapSpawn, MapConnection } from '../types';
 
 export const regionsApi = {
   getAll: () => api.get<Region[]>('/regions').then(r => r.data),
@@ -19,7 +19,8 @@ export const mapsApi = {
   create: (data: Partial<GameMap>) => api.post<GameMap>('/maps', data).then(r => r.data),
   update: (id: number, data: Partial<GameMap>) => api.patch<GameMap>(`/maps/${id}`, data).then(r => r.data),
   remove: (id: number) => api.delete(`/maps/${id}`),
-  addConnection: (mapId: number, data: { toMapId: number; positionX: number; positionY: number; nom: string }) =>
+  getAllPortals: () => api.get<MapConnection[]>('/maps/portals').then(r => r.data),
+  addConnection: (mapId: number, data: { toMapId?: number | null; positionX: number; positionY: number; nom: string }) =>
     api.post(`/maps/${mapId}/connections`, data).then(r => r.data),
   removeConnection: (mapId: number, connId: number) =>
     api.delete(`/maps/${mapId}/connections/${connId}`),

@@ -2,7 +2,9 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { groupsApi } from '../../api/groups';
 import { mapsApi } from '../../api/maps';
-import type { Group, GameMap, Direction, MapConnection, GroupeEnnemi, MapCase } from '../../types';
+import { pnjApi } from '../../api/pnj';
+import { charactersApi } from '../../api/characters';
+import type { Group, GameMap, Direction, MapConnection, GroupeEnnemi, MapCase, PNJ, MarchandLigne, Character, InventoryState } from '../../types';
 import '../../styles/index.css';
 
 const CELL_SIZE = 40;
@@ -96,6 +98,19 @@ const MapPage: React.FC = () => {
   } | null>(null);
   const [selectedDifficulty, setSelectedDifficulty] = useState<number>(4);
 
+  // Network portal modal state
+  const [portalModal, setPortalModal] = useState<{ connection: MapConnection } | null>(null);
+  const [allPortals, setAllPortals] = useState<MapConnection[]>([]);
+
+  // PNJ state
+  const [mapPNJs, setMapPNJs] = useState<PNJ[]>([]);
+  const [merchantModal, setMerchantModal] = useState<PNJ | null>(null);
+  const [merchantTab, setMerchantTab] = useState<'buy' | 'sell'>('buy');
+  const [merchantPersonnageId, setMerchantPersonnageId] = useState<number | null>(null);
+  const [merchantFeedback, setMerchantFeedback] = useState<Record<string, { ok: boolean; msg: string }>>({});
+  const [merchantChars, setMerchantChars] = useState<Character[]>([]);
+  const [merchantInventory, setMerchantInventory] = useState<InventoryState | null>(null);
+
   // Enemy group modal state (click on enemy cell → confirm before engaging)
   const [enemyModal, setEnemyModal] = useState<{ group: GroupeEnnemi } | null>(null);
 
@@ -103,23 +118,30 @@ const MapPage: React.FC = () => {
     const g = await groupsApi.getById(gId);
     setGroup(g);
     if (g.mapId) {
-      const [map, grid] = await Promise.all([
+      const [map, grid, pnjs] = await Promise.all([
         mapsApi.getById(g.mapId),
         mapsApi.getGrid(g.mapId),
+        pnjApi.getByMap(g.mapId),
       ]);
       setMapData(map);
       setMapCases(grid.cases ?? []);
+      setMapPNJs(pnjs);
     } else {
       setMapData(null);
       setMapCases([]);
+      setMapPNJs([]);
     }
   }, []);
 
   useEffect(() => {
     const init = async () => {
       setLoading(true);
-      const maps = await mapsApi.getAll();
+      const [maps, portals] = await Promise.all([
+        mapsApi.getAll(),
+        mapsApi.getAllPortals(),
+      ]);
       setAllMaps(maps);
+      setAllPortals(portals);
       if (groupIdParam) {
         await loadGroup(Number(groupIdParam));
       }
@@ -160,6 +182,15 @@ const MapPage: React.FC = () => {
     return set;
   }, [mapCases]);
 
+  // PNJ lookup by position
+  const pnjAt = useMemo(() => {
+    const map = new Map<string, PNJ>();
+    for (const p of mapPNJs) {
+      map.set(`${p.positionX},${p.positionY}`, p);
+    }
+    return map;
+  }, [mapPNJs]);
+
   const handleCellClick = async (x: number, y: number) => {
     if (!group || !mapData || moving) return;
 
@@ -172,21 +203,8 @@ const MapPage: React.FC = () => {
         setDungeonModal({ connection: conn });
         return;
       }
-      // Normal connection: use it directly
-      setMoving(true);
-      try {
-        const result = await groupsApi.useConnection(group.id, conn.id);
-        if (result?.combat) {
-          navigate(`/game/combat/${result.combat.id}`);
-          return;
-        }
-        await loadGroup(group.id);
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message :
-          (err as any)?.response?.data?.error || 'Erreur';
-        alert(msg);
-      }
-      setMoving(false);
+      // Network portal: show destination selection modal
+      setPortalModal({ connection: conn });
       return;
     }
 
@@ -355,6 +373,7 @@ const MapPage: React.FC = () => {
       if (ge.positionX === x && ge.positionY === y) return 'enemy';
     }
     if (connectionAt.has(`${x},${y}`)) return 'connection';
+    if (pnjAt.has(`${x},${y}`)) return 'npc';
     return 'empty';
   };
 
@@ -371,6 +390,9 @@ const MapPage: React.FC = () => {
 
   // Check if player is on a connection
   const playerOnConnection = connectionAt.get(`${group.positionX},${group.positionY}`);
+
+  // Check if player is on an NPC
+  const playerOnNPC = pnjAt.get(`${group.positionX},${group.positionY}`);
 
   // Mini-map rendering
   const { grid: worldMap, minX, minY, maxX, maxY } = worldGrid;
@@ -420,11 +442,44 @@ const MapPage: React.FC = () => {
                 if (playerOnConnection.donjonId && playerOnConnection.donjon) {
                   setDungeonModal({ connection: playerOnConnection });
                 } else {
-                  handleCellClick(group.positionX, group.positionY);
+                  setPortalModal({ connection: playerOnConnection });
                 }
               }}
             >
               {playerOnConnection.donjonId ? 'Entrer dans le donjon' : 'Utiliser le portail'}
+            </button>
+          </div>
+        )}
+
+        {/* NPC prompt when player is on an NPC cell */}
+        {playerOnNPC && playerOnNPC.estMarchand && (
+          <div style={{
+            padding: '8px 16px', marginBottom: 8, borderRadius: 8,
+            background: '#388e3c', color: 'white',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          }}>
+            <span>💬 <strong>{playerOnNPC.nom}</strong></span>
+            <button
+              className="btn btn-sm"
+              style={{ background: 'white', color: '#388e3c' }}
+              onClick={async () => {
+                const full = await pnjApi.getById(playerOnNPC.id);
+                setMerchantModal(full);
+                setMerchantTab('buy');
+                setMerchantFeedback({});
+                setMerchantInventory(null);
+                // Load group characters for selector
+                const g = await groupsApi.getById(group.id);
+                const chars = g.personnages?.map((gp: any) => gp.personnage).filter(Boolean) ?? [];
+                setMerchantChars(chars);
+                if (chars.length > 0) {
+                  setMerchantPersonnageId(chars[0].id);
+                  const inv = await charactersApi.getInventory(chars[0].id);
+                  setMerchantInventory(inv);
+                }
+              }}
+            >
+              Parler à {playerOnNPC.nom}
             </button>
           </div>
         )}
@@ -444,6 +499,7 @@ const MapPage: React.FC = () => {
                 const edge = isEdge(x, y);
                 const enemy = cellType === 'enemy' ? getEnemyAt(x, y) : null;
                 const conn = connectionAt.get(`${x},${y}`);
+                const npc = pnjAt.get(`${x},${y}`);
                 const isPlayerHere = x === group.positionX && y === group.positionY;
 
                 const isBlocked = blockedAt.has(`${x},${y}`);
@@ -453,6 +509,7 @@ const MapPage: React.FC = () => {
                 if (isPlayerHere) className += ' cell-player';
                 else if (cellType === 'enemy') className += ' cell-enemy';
                 else if (cellType === 'connection') className += ' cell-connection';
+                else if (cellType === 'npc') className += ' cell-npc';
                 if (edge) className += ' cell-edge';
 
                 return (
@@ -479,6 +536,8 @@ const MapPage: React.FC = () => {
                     }
                     style={cellType === 'connection' && !isPlayerHere ? {
                       background: conn?.donjonId ? '#ce93d8' : '#90caf9',
+                    } : cellType === 'npc' && !isPlayerHere ? {
+                      background: '#a5d6a7',
                     } : undefined}
                   >
                     {isPlayerHere && <span className="cell-icon">P</span>}
@@ -487,6 +546,9 @@ const MapPage: React.FC = () => {
                       <span className="cell-icon" style={{ fontSize: 16 }}>
                         {conn?.donjonId ? '\u2694' : '\u{1F6AA}'}
                       </span>
+                    )}
+                    {cellType === 'npc' && !isPlayerHere && (
+                      <span className="cell-icon" style={{ fontSize: 14 }} title={npc?.nom}>💬</span>
                     )}
                     {cellType === 'empty' && edge && <span className="cell-edge-arrow">
                       {edge === 'NORD' ? '\u2191' : edge === 'SUD' ? '\u2193' : edge === 'OUEST' ? '\u2190' : '\u2192'}
@@ -737,6 +799,284 @@ const MapPage: React.FC = () => {
               >
                 Entrer dans le donjon
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Merchant modal */}
+      {merchantModal && (
+        <div className="modal-overlay" onClick={() => setMerchantModal(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 580, maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <h2 style={{ margin: 0 }}>💬 {merchantModal.nom}</h2>
+              <button className="btn btn-secondary btn-sm" onClick={() => setMerchantModal(null)}>Fermer</button>
+            </div>
+
+            {/* Character selector */}
+            {merchantChars.length > 0 && (
+              <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <label style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>Personnage :</label>
+                <select
+                  value={merchantPersonnageId ?? ''}
+                  onChange={async (e) => {
+                    const id = Number(e.target.value);
+                    setMerchantPersonnageId(id);
+                    setMerchantFeedback({});
+                    setMerchantInventory(null);
+                    const inv = await charactersApi.getInventory(id);
+                    setMerchantInventory(inv);
+                  }}
+                  style={{ flex: 1 }}
+                >
+                  {merchantChars.map(c => (
+                    <option key={c.id} value={c.id}>{c.nom}</option>
+                  ))}
+                </select>
+                {merchantInventory && (
+                  <span style={{ color: '#ffd700', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                    💰 {merchantInventory.or} or
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Tabs */}
+            <div style={{ display: 'flex', gap: 4, marginBottom: 12 }}>
+              <button
+                className={`btn btn-sm ${merchantTab === 'buy' ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => { setMerchantTab('buy'); setMerchantFeedback({}); }}
+              >
+                Acheter
+              </button>
+              <button
+                className={`btn btn-sm ${merchantTab === 'sell' ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => { setMerchantTab('sell'); setMerchantFeedback({}); }}
+              >
+                Vendre
+              </button>
+            </div>
+
+            {/* Tab content */}
+            <div style={{ overflow: 'auto', flex: 1 }}>
+              {merchantTab === 'buy' ? (
+                <div>
+                  {merchantModal.lignes.filter(l => l.prixMarchand != null).length === 0 ? (
+                    <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: 16 }}>
+                      Ce marchand n'a rien à vendre.
+                    </p>
+                  ) : (
+                    merchantModal.lignes.filter(l => l.prixMarchand != null).map(l => {
+                      const name = l.equipement?.nom ?? l.ressource?.nom ?? `Article #${l.id}`;
+                      const fb = merchantFeedback[String(l.id)];
+                      return (
+                        <div key={l.id} style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                          padding: '8px 12px', marginBottom: 6, background: 'var(--surface-2, #2a2a2a)',
+                          borderRadius: 6, gap: 8,
+                        }}>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: 600, fontSize: 14 }}>{name}</div>
+                            {l.equipement && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{l.equipement.slot}</div>}
+                            {fb && (
+                              <div style={{ fontSize: 12, color: fb.ok ? '#66bb6a' : '#ef5350', marginTop: 2 }}>{fb.msg}</div>
+                            )}
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                            <span style={{ color: '#ffd700', fontWeight: 600 }}>{l.prixMarchand} or</span>
+                            <button
+                              className="btn btn-sm btn-primary"
+                              disabled={!merchantPersonnageId}
+                              onClick={async () => {
+                                if (!merchantPersonnageId) return;
+                                try {
+                                  await pnjApi.buy(merchantModal.id, { personnageId: merchantPersonnageId, ligneId: l.id });
+                                  setMerchantFeedback(prev => ({ ...prev, [String(l.id)]: { ok: true, msg: 'Acheté !' } }));
+                                  const inv = await charactersApi.getInventory(merchantPersonnageId);
+                                  setMerchantInventory(inv);
+                                } catch (err: unknown) {
+                                  const msg = (err as any)?.response?.data?.error || (err instanceof Error ? err.message : 'Erreur');
+                                  setMerchantFeedback(prev => ({ ...prev, [String(l.id)]: { ok: false, msg } }));
+                                }
+                              }}
+                            >
+                              Acheter
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              ) : (
+                <div>
+                  {!merchantInventory ? (
+                    <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: 16 }}>Chargement de l'inventaire...</p>
+                  ) : (() => {
+                    const rachatLines = merchantModal.lignes.filter(l => l.prixRachat != null);
+                    const sellableItems = merchantInventory.items.filter(item =>
+                      !item.estEquipe && rachatLines.some(l => l.equipementId === item.equipementId)
+                    );
+                    const sellableResources = merchantInventory.ressources.filter(res =>
+                      rachatLines.some(l => l.ressourceId === res.ressourceId)
+                    );
+
+                    if (sellableItems.length === 0 && sellableResources.length === 0) {
+                      return (
+                        <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: 16 }}>
+                          Ce marchand n'achète rien de ce que vous possédez.
+                        </p>
+                      );
+                    }
+
+                    return (
+                      <>
+                        {sellableItems.map(item => {
+                          const ligne = rachatLines.find(l => l.equipementId === item.equipementId)!;
+                          const fb = merchantFeedback[`item_${item.id}`];
+                          return (
+                            <div key={item.id} style={{
+                              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                              padding: '8px 12px', marginBottom: 6, background: 'var(--surface-2, #2a2a2a)',
+                              borderRadius: 6, gap: 8,
+                            }}>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontWeight: 600, fontSize: 14 }}>{item.nom}</div>
+                                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{item.slot}</div>
+                                {fb && (
+                                  <div style={{ fontSize: 12, color: fb.ok ? '#66bb6a' : '#ef5350', marginTop: 2 }}>{fb.msg}</div>
+                                )}
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                                <span style={{ color: '#ffd700', fontWeight: 600 }}>{ligne.prixRachat} or</span>
+                                <button
+                                  className="btn btn-sm btn-secondary"
+                                  disabled={!merchantPersonnageId}
+                                  onClick={async () => {
+                                    if (!merchantPersonnageId) return;
+                                    try {
+                                      await pnjApi.sell(merchantModal.id, { personnageId: merchantPersonnageId, ligneId: ligne.id, itemId: item.id });
+                                      setMerchantFeedback(prev => ({ ...prev, [`item_${item.id}`]: { ok: true, msg: 'Vendu !' } }));
+                                      const inv = await charactersApi.getInventory(merchantPersonnageId);
+                                      setMerchantInventory(inv);
+                                    } catch (err: unknown) {
+                                      const msg = (err as any)?.response?.data?.error || (err instanceof Error ? err.message : 'Erreur');
+                                      setMerchantFeedback(prev => ({ ...prev, [`item_${item.id}`]: { ok: false, msg } }));
+                                    }
+                                  }}
+                                >
+                                  Vendre
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                        {sellableResources.map(res => {
+                          const ligne = rachatLines.find(l => l.ressourceId === res.ressourceId)!;
+                          const fb = merchantFeedback[`res_${res.ressourceId}`];
+                          return (
+                            <div key={res.ressourceId} style={{
+                              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                              padding: '8px 12px', marginBottom: 6, background: 'var(--surface-2, #2a2a2a)',
+                              borderRadius: 6, gap: 8,
+                            }}>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontWeight: 600, fontSize: 14 }}>{res.nom}</div>
+                                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>×{res.quantite} en stock</div>
+                                {fb && (
+                                  <div style={{ fontSize: 12, color: fb.ok ? '#66bb6a' : '#ef5350', marginTop: 2 }}>{fb.msg}</div>
+                                )}
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                                <span style={{ color: '#ffd700', fontWeight: 600 }}>{ligne.prixRachat} or / unité</span>
+                                <button
+                                  className="btn btn-sm btn-secondary"
+                                  disabled={!merchantPersonnageId}
+                                  onClick={async () => {
+                                    if (!merchantPersonnageId) return;
+                                    try {
+                                      await pnjApi.sell(merchantModal.id, { personnageId: merchantPersonnageId, ligneId: ligne.id });
+                                      setMerchantFeedback(prev => ({ ...prev, [`res_${res.ressourceId}`]: { ok: true, msg: 'Vendu !' } }));
+                                      const inv = await charactersApi.getInventory(merchantPersonnageId);
+                                      setMerchantInventory(inv);
+                                    } catch (err: unknown) {
+                                      const msg = (err as any)?.response?.data?.error || (err instanceof Error ? err.message : 'Erreur');
+                                      setMerchantFeedback(prev => ({ ...prev, [`res_${res.ressourceId}`]: { ok: false, msg } }));
+                                    }
+                                  }}
+                                >
+                                  Vendre 1
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Portal network modal */}
+      {portalModal && group && (
+        <div className="modal-overlay" onClick={() => setPortalModal(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 500, maxHeight: '70vh', overflow: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <h2 style={{ margin: 0 }}>Choisir une destination</h2>
+              <button className="btn btn-secondary btn-sm" onClick={() => setPortalModal(null)}>Fermer</button>
+            </div>
+            <p style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 12 }}>
+              Portail : <strong>{portalModal.connection.nom}</strong>
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {allPortals
+                .filter(p => p.id !== portalModal.connection.id)
+                .map(dest => (
+                  <button
+                    key={dest.id}
+                    className="btn btn-secondary"
+                    style={{ textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                    disabled={moving}
+                    onClick={async () => {
+                      setMoving(true);
+                      try {
+                        const result = await groupsApi.useConnection(group.id, portalModal.connection.id, undefined, dest.id);
+                        setPortalModal(null);
+                        if (result?.combat) {
+                          navigate(`/game/combat/${result.combat.id}`);
+                          return;
+                        }
+                        await loadGroup(group.id);
+                      } catch (err: unknown) {
+                        const msg = (err as any)?.response?.data?.error || (err instanceof Error ? err.message : 'Erreur');
+                        alert(msg);
+                      } finally {
+                        setMoving(false);
+                      }
+                    }}
+                  >
+                    <span>
+                      <strong>{dest.nom}</strong>
+                    </span>
+                    <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 8 }}>
+                      {dest.fromMap?.nom}
+                      {dest.fromMap && (
+                        <span style={{
+                          marginLeft: 6, padding: '1px 6px', borderRadius: 4, fontSize: 11,
+                          background: dest.fromMap.type === 'VILLE' ? '#4caf50' : dest.fromMap.type === 'SAFE' ? '#2196f3' : '#9e9e9e',
+                          color: 'white',
+                        }}>{dest.fromMap.type}</span>
+                      )}
+                    </span>
+                  </button>
+                ))}
+              {allPortals.filter(p => p.id !== portalModal.connection.id).length === 0 && (
+                <p style={{ color: 'var(--text-muted)', textAlign: 'center' }}>Aucune autre destination disponible.</p>
+              )}
             </div>
           </div>
         </div>

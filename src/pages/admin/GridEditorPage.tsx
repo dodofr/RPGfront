@@ -15,7 +15,7 @@ type CellData =
 
 type Tool = 'spawn-player' | 'spawn-enemy' | 'obstacle-pm' | 'obstacle-los' | 'excluded' | 'portal' | 'eraser';
 
-type PortalData = { toMapId: number; nom: string };
+type PortalData = { nom: string };
 
 const GridEditorPage: React.FC = () => {
   const { mapId } = useParams<{ mapId: string }>();
@@ -24,7 +24,6 @@ const GridEditorPage: React.FC = () => {
   const [portals, setPortals] = useState<Map<string, PortalData>>(new Map());
   const [allMaps, setAllMaps] = useState<GameMap[]>([]);
   const [originalConnections, setOriginalConnections] = useState<MapConnection[]>([]);
-  const [portalToMapId, setPortalToMapId] = useState<number | ''>('');
   const [portalNom, setPortalNom] = useState('');
   const [tool, setTool] = useState<Tool>('spawn-player');
   const [painting, setPainting] = useState(false);
@@ -68,7 +67,6 @@ const GridEditorPage: React.FC = () => {
       const initialPortals = new Map<string, PortalData>();
       for (const conn of nonDungeonConns) {
         initialPortals.set(`${conn.positionX},${conn.positionY}`, {
-          toMapId: conn.toMapId,
           nom: conn.nom,
         });
       }
@@ -121,10 +119,10 @@ const GridEditorPage: React.FC = () => {
     }
 
     if (tool === 'portal') {
-      if (!portalToMapId || !portalNom.trim()) return;
+      if (!portalNom.trim()) return;
       setPortals(prev => {
         const next = new Map(prev);
-        next.set(key, { toMapId: Number(portalToMapId), nom: portalNom.trim() });
+        next.set(key, { nom: portalNom.trim() });
         return next;
       });
       return;
@@ -170,7 +168,7 @@ const GridEditorPage: React.FC = () => {
 
       return next;
     });
-  }, [tool, portalToMapId, portalNom]);
+  }, [tool, portalNom]);
 
   const handleMouseDown = (x: number, y: number) => {
     setPainting(true);
@@ -178,7 +176,7 @@ const GridEditorPage: React.FC = () => {
   };
 
   const handleMouseEnter = (x: number, y: number) => {
-    if (painting) applyTool(x, y);
+    if (painting && tool !== 'portal') applyTool(x, y);
   };
 
   const handleMouseUp = () => setPainting(false);
@@ -227,7 +225,7 @@ const GridEditorPage: React.FC = () => {
       await Promise.all([...portals.entries()].map(([key, data]) => {
         const [xStr, yStr] = key.split(',');
         return mapsApi.addConnection(Number(mapId), {
-          toMapId: data.toMapId,
+          toMapId: null,
           positionX: Number(xStr),
           positionY: Number(yStr),
           nom: data.nom,
@@ -298,25 +296,15 @@ const GridEditorPage: React.FC = () => {
 
         {tool === 'portal' && (
           <div className="portal-config">
-            <label>Destination :</label>
-            <select
-              value={portalToMapId}
-              onChange={e => setPortalToMapId(e.target.value ? Number(e.target.value) : '')}
-            >
-              <option value="">— choisir —</option>
-              {allMaps.map(m => (
-                <option key={m.id} value={m.id}>{m.nom}</option>
-              ))}
-            </select>
             <label>Nom :</label>
             <input
               value={portalNom}
               onChange={e => setPortalNom(e.target.value)}
-              placeholder="ex: Chemin vers..."
+              placeholder="ex: Portail central..."
             />
-            {(!portalToMapId || !portalNom.trim()) && (
+            {!portalNom.trim() && (
               <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>
-                Choisissez une destination et un nom avant de cliquer sur une case
+                Entrez un nom avant de cliquer sur une case. La destination est choisie en jeu.
               </span>
             )}
           </div>
@@ -341,7 +329,7 @@ const GridEditorPage: React.FC = () => {
                   onMouseDown={(e) => { e.preventDefault(); handleMouseDown(x, y); }}
                   onMouseEnter={() => handleMouseEnter(x, y)}
                   onMouseUp={handleMouseUp}
-                  title={portal ? `Portail → ${allMaps.find(m => m.id === portal.toMapId)?.nom ?? `Map #${portal.toMapId}`}: ${portal.nom}` : undefined}
+                  title={portal ? `Portail réseau : ${portal.nom}` : undefined}
                 >
                   {portal ? '\uD83D\uDEAA' : getCellLabel(cell)}
                 </div>
@@ -353,14 +341,11 @@ const GridEditorPage: React.FC = () => {
         {portals.size > 0 && (
           <div className="portal-list">
             <strong>Portails ({portals.size}) :</strong>
-            {[...portals.entries()].map(([key, data]) => {
-              const dest = allMaps.find(m => m.id === data.toMapId);
-              return (
-                <span key={key} className="portal-tag">
-                  ({key}) → {dest?.nom ?? `Map #${data.toMapId}`} — {data.nom}
-                </span>
-              );
-            })}
+            {[...portals.entries()].map(([key, data]) => (
+              <span key={key} className="portal-tag">
+                ({key}) — {data.nom}
+              </span>
+            ))}
           </div>
         )}
       </div>

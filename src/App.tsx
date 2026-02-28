@@ -16,6 +16,8 @@ import GridEditorPage from './pages/admin/GridEditorPage'
 import MonstreDetailPage from './pages/admin/MonstreDetailPage'
 import SortDetailPage from './pages/admin/SortDetailPage'
 import EquipementDetailPage from './pages/admin/EquipementDetailPage'
+import PassivesPage from './pages/admin/PassivesPage'
+import PNJPage from './pages/admin/PNJPage'
 
 // Game pages
 import PlayersPage from './pages/game/PlayersPage'
@@ -52,6 +54,8 @@ const router = createBrowserRouter([
       { path: 'monstres/:id', element: <MonstreDetailPage /> },
       { path: 'sorts/:id', element: <SortDetailPage /> },
       { path: 'equipements/:id', element: <EquipementDetailPage /> },
+      { path: 'passives', element: <PassivesPage /> },
+      { path: 'pnj', element: <PNJPage /> },
     ],
   },
 ])

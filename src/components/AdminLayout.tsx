@@ -6,6 +6,8 @@ const adminLinks = [
   { to: '/admin/entites', label: 'Entites', desc: 'Races, Monstres' },
   { to: '/admin/combat', label: 'Combat', desc: 'Sorts, Effets, Zones' },
   { to: '/admin/objets', label: 'Objets', desc: 'Equipements, Ressources, Panoplies, Recettes' },
+  { to: '/admin/passives', label: 'Passives', desc: 'Compétences passives par niveau' },
+  { to: '/admin/pnj', label: 'PNJ', desc: 'Marchands et PNJ de map' },
 ];
 
 const AdminLayout: React.FC = () => {

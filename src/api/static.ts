@@ -1,5 +1,5 @@
 import api from './client';
-import type { Race, Sort, Equipment, Effet, Zone, SortEffet, LigneDegatsArme, Ressource, Panoplie, PanoplieBonus, Recette, RecetteIngredient } from '../types';
+import type { Race, Sort, Equipment, Effet, Zone, SortEffet, LigneDegatsArme, Ressource, Panoplie, PanoplieBonus, Recette, RecetteIngredient, CompetencePassive } from '../types';
 
 export const racesApi = {
   getAll: () => api.get<Race[]>('/races').then(r => r.data),
@@ -71,6 +71,14 @@ export const setsApi = {
     api.patch<PanoplieBonus>(`/sets/${setId}/bonuses/${bonusId}`, data).then(r => r.data),
   removeBonus: (setId: number, bonusId: number) =>
     api.delete(`/sets/${setId}/bonuses/${bonusId}`),
+};
+
+export const passivesApi = {
+  getAll: () => api.get<CompetencePassive[]>('/passives').then(r => r.data),
+  getById: (id: number) => api.get<CompetencePassive>(`/passives/${id}`).then(r => r.data),
+  create: (data: Partial<CompetencePassive>) => api.post<CompetencePassive>('/passives', data).then(r => r.data),
+  update: (id: number, data: Partial<CompetencePassive>) => api.patch<CompetencePassive>(`/passives/${id}`, data).then(r => r.data),
+  remove: (id: number) => api.delete(`/passives/${id}`),
 };
 
 export const recipesAdminApi = {
