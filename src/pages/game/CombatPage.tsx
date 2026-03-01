@@ -8,6 +8,7 @@ import {
   getCellsInRange,
   getAffectedCells,
   hasLineOfSight,
+  getPathTo,
 } from '../../utils/combatPreview';
 
 interface LigneDegatsData {
@@ -238,6 +239,31 @@ const CombatPage: React.FC = () => {
       combat.entites,
       combat.cases
     );
+  })();
+
+  // Path preview cells (intermediate cells on BFS path to hovered cell)
+  const pathCells: Set<string> = (() => {
+    if (!moveMode || !hoveredCell || !currentEntity || !isPlayerTurn) return new Set<string>();
+    const hKey = `${hoveredCell.x},${hoveredCell.y}`;
+    if (!reachableCells.has(hKey)) return new Set<string>();
+
+    const path = getPathTo(
+      currentEntity.position,
+      hoveredCell,
+      currentEntity.pmActuels,
+      combat.grille.largeur,
+      combat.grille.hauteur,
+      combat.entites,
+      combat.cases
+    );
+    if (!path) return new Set<string>();
+
+    const result = new Set<string>();
+    // All intermediate cells (exclude destination — it has its own hover style)
+    for (let i = 0; i < path.length - 1; i++) {
+      result.add(`${path[i].x},${path[i].y}`);
+    }
+    return result;
   })();
 
   // Range cells for spell/weapon
@@ -847,6 +873,7 @@ const CombatPage: React.FC = () => {
                 const isDead = entity && entity.pvActuels <= 0;
 
                 const inMoveRange = moveMode && reachableCells.has(cellKey);
+                const inPath = moveMode && pathCells.has(cellKey);
                 const inSpellRange = (selectedSort || weaponMode) && rangeCells.has(cellKey);
                 const inSpellBlocked = (selectedSort || weaponMode) && rangeBlockedCells.has(cellKey);
                 const inAoe = aoeCells.has(cellKey);
@@ -869,6 +896,7 @@ const CombatPage: React.FC = () => {
                 if (isSelected) cellClass += ' selected-cell';
                 if (isDead) cellClass += ' dead';
                 if (inMoveRange) cellClass += ' move-range';
+                if (inPath) cellClass += ' cell-path';
                 if (inSpellRange) cellClass += ' spell-range';
                 if (inSpellBlocked) cellClass += ' spell-range-blocked';
                 if (inAoe) cellClass += ' aoe-preview';

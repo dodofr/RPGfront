@@ -357,6 +357,13 @@
   background: rgba(76, 175, 80, 0.4);
 }
 
+/* Path preview: intermediate cells on BFS path to hovered destination */
+.combat-cell.move-range.cell-path {
+  background: rgba(76, 175, 80, 0.4) !important;
+  outline: 2px dashed rgba(76, 175, 80, 0.8);
+  outline-offset: -2px;
+}
+
 /* Spell/weapon range */
 .combat-cell.spell-range {
   background: rgba(255, 152, 0, 0.15);

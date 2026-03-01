@@ -75,6 +75,78 @@ export function getReachableCells(
   return result;
 }
 
+// --- Path to destination (BFS with parent reconstruction) ---
+
+export function getPathTo(
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+  pm: number,
+  gridWidth: number,
+  gridHeight: number,
+  entities: CombatEntity[],
+  obstacles: CombatCase[]
+): { x: number; y: number }[] | null {
+  if (from.x === to.x && from.y === to.y) return [];
+
+  const occupiedSet = new Set<string>();
+  const blockedSet = new Set<string>();
+
+  entities.filter(e => e.pvActuels > 0).forEach(e => occupiedSet.add(key(e.position.x, e.position.y)));
+  obstacles.filter(c => c.bloqueDeplacement).forEach(c => blockedSet.add(key(c.x, c.y)));
+
+  const visited = new Set<string>();
+  const parent = new Map<string, string>();
+  const startKey = key(from.x, from.y);
+  visited.add(startKey);
+
+  const queue: Array<{ x: number; y: number; cost: number }> = [
+    { x: from.x, y: from.y, cost: 0 },
+  ];
+
+  const directions = [
+    { dx: 1, dy: 0 },
+    { dx: -1, dy: 0 },
+    { dx: 0, dy: 1 },
+    { dx: 0, dy: -1 },
+  ];
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+
+    for (const dir of directions) {
+      const nx = current.x + dir.dx;
+      const ny = current.y + dir.dy;
+      const nk = key(nx, ny);
+      const nextCost = current.cost + 1;
+
+      if (nextCost > pm) continue;
+      if (!isInBounds(nx, ny, gridWidth, gridHeight)) continue;
+      if (visited.has(nk)) continue;
+      if (blockedSet.has(nk)) continue;
+
+      visited.add(nk);
+      parent.set(nk, key(current.x, current.y));
+
+      if (nx === to.x && ny === to.y) {
+        // Reconstruct path
+        const path: { x: number; y: number }[] = [];
+        let cur = nk;
+        while (cur !== startKey) {
+          const [px, py] = cur.split(',').map(Number);
+          path.unshift({ x: px, y: py });
+          cur = parent.get(cur)!;
+        }
+        return path;
+      }
+
+      if (occupiedSet.has(nk)) continue;
+      queue.push({ x: nx, y: ny, cost: nextCost });
+    }
+  }
+
+  return null;
+}
+
 // --- Range cells (spell/weapon) ---
 
 export function getCellsInRange(
