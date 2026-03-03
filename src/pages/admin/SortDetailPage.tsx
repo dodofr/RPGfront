@@ -68,6 +68,7 @@ const SortDetailPage: React.FC = () => {
   const [estGlyphe, setEstGlyphe] = useState(false);
   const [estPiege, setEstPiege] = useState(false);
   const [estTeleportation, setEstTeleportation] = useState(false);
+  const [estSelfBuff, setEstSelfBuff] = useState(false);
   const [porteeModifiable, setPorteeModifiable] = useState(true);
   const [ligneDirecte, setLigneDirecte] = useState(false);
 
@@ -108,6 +109,7 @@ const SortDetailPage: React.FC = () => {
       setEstGlyphe(data.estGlyphe ?? false);
       setEstPiege(data.estPiege ?? false);
       setEstTeleportation(data.estTeleportation ?? false);
+      setEstSelfBuff(data.estSelfBuff ?? false);
       setPorteeModifiable(data.porteeModifiable !== false);
       setLigneDirecte(data.ligneDirecte ?? false);
       setCoefficient(data.coefficient ?? 1.0);
@@ -136,7 +138,7 @@ const SortDetailPage: React.FC = () => {
       invocationTemplateId: estInvocation ? (invocationTemplateId || null) : null,
       poseDuree: (estGlyphe || estPiege) ? poseDuree : null,
       description: description || null,
-      estSoin, estInvocation, estVolDeVie, estGlyphe, estPiege, estTeleportation, porteeModifiable, ligneDirecte,
+      estSoin, estInvocation, estVolDeVie, estGlyphe, estPiege, estTeleportation, estSelfBuff, porteeModifiable, ligneDirecte,
       coefficient,
     });
     await load();
@@ -189,6 +191,7 @@ const SortDetailPage: React.FC = () => {
           {estGlyphe && <span className="badge badge-warning">Glyphe</span>}
           {estPiege && <span className="badge badge-secondary">Piège</span>}
           {estTeleportation && <span className="badge badge-info">Téléportation</span>}
+          {estSelfBuff && <span className="badge badge-warning">Self-buff</span>}
           {ligneDirecte && <span className="badge badge-info">Ligne droite</span>}
           {tauxEchec > 0 && <span className="badge badge-danger">Echec {Math.round(tauxEchec * 100)}%</span>}
         </div>
@@ -304,6 +307,7 @@ const SortDetailPage: React.FC = () => {
               ['Pose un glyphe', estGlyphe, setEstGlyphe],
               ['Pose un piège', estPiege, setEstPiege],
               ['Téléportation', estTeleportation, setEstTeleportation],
+              ['Self-buff (IA : caste sur soi)', estSelfBuff, setEstSelfBuff],
               ['PO modifiable par buffs', porteeModifiable, setPorteeModifiable],
               ['Ligne droite uniquement', ligneDirecte, setLigneDirecte],
             ] as [string, boolean, (v: boolean) => void][]).map(([label, val, setter]) => (

@@ -31,7 +31,6 @@ const MapsPage: React.FC = () => {
     },
     { key: 'largeur', header: 'Largeur' },
     { key: 'hauteur', header: 'Hauteur' },
-    { key: 'tauxRencontre', header: 'Taux rencontre' },
     {
       key: 'worldX',
       header: 'Pos. monde',
@@ -90,7 +89,6 @@ const MapsPage: React.FC = () => {
     },
     { name: 'largeur', label: 'Largeur', type: 'number', required: true, min: 5, defaultValue: 16 },
     { name: 'hauteur', label: 'Hauteur', type: 'number', required: true, min: 5, defaultValue: 18 },
-    { name: 'tauxRencontre', label: 'Taux rencontre', type: 'float', defaultValue: 0.2, step: 0.01 },
     ...(!editing?.worldX && !editing?.worldY ? [
       { name: 'nordMapId', label: 'Map Nord', type: 'select' as const, options: allMapsOptions },
       { name: 'sudMapId', label: 'Map Sud', type: 'select' as const, options: allMapsOptions },

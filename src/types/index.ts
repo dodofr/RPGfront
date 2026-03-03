@@ -66,6 +66,7 @@ export interface Sort {
   estGlyphe?: boolean;
   estPiege?: boolean;
   estTeleportation?: boolean;
+  estSelfBuff?: boolean;
   poseDuree?: number | null;
   porteeModifiable?: boolean;
   ligneDirecte?: boolean;
@@ -220,7 +221,6 @@ export interface GameMap {
   combatMode: CombatMode;
   largeur: number;
   hauteur: number;
-  tauxRencontre: number;
   nordMapId: number | null;
   sudMapId: number | null;
   estMapId: number | null;

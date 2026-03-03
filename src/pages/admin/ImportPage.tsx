@@ -7,6 +7,10 @@ interface ImportError {
 }
 
 const COUNTER_LABELS: Record<keyof ImportCounters, string> = {
+  regions:           'Régions',
+  maps:              'Maps',
+  mapCases:          'Cases de grille',
+  mapSpawns:         'Points de spawn',
   ressources:        'Ressources',
   effets:            'Effets',
   zones:             'Zones',
@@ -16,6 +20,7 @@ const COUNTER_LABELS: Record<keyof ImportCounters, string> = {
   monstres:          'Monstres',
   monstreSorts:      'Liaisons monstre→sort',
   monstreDrops:      'Drops monstres',
+  regionMonstres:    'Monstres→régions',
   equipements:       'Équipements',
   lignesDegats:      'Lignes de dégâts',
   recettes:          'Recettes',
@@ -174,12 +179,14 @@ const ImportPage: React.FC = () => {
               <p className="import-hint-title">Sections disponibles</p>
               <table className="import-sections-table">
                 <tbody>
+                  <tr><td>regions</td><td>Régions du monde (FORET, PLAINE…)</td></tr>
+                  <tr><td>maps</td><td>Maps avec cases, spawns et obstacles</td></tr>
                   <tr><td>ressources</td><td>Ressources et matériaux</td></tr>
                   <tr><td>effets</td><td>Buffs, debuffs, poisons…</td></tr>
                   <tr><td>zones</td><td>Types de zone d'effet (CASE, CROIX…)</td></tr>
                   <tr><td>races</td><td>Races jouables</td></tr>
                   <tr><td>sorts</td><td>Sorts avec zone et effets liés</td></tr>
-                  <tr><td>monstres</td><td>Templates avec sorts et drops</td></tr>
+                  <tr><td>monstres</td><td>Templates avec sorts, drops et régions</td></tr>
                   <tr><td>equipements</td><td>Items avec lignes de dégâts</td></tr>
                   <tr><td>recettes</td><td>Recettes de craft</td></tr>
                 </tbody>

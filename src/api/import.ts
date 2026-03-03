@@ -1,6 +1,10 @@
 import api from './client';
 
 export interface ImportCounters {
+  regions: number;
+  maps: number;
+  mapCases: number;
+  mapSpawns: number;
   ressources: number;
   effets: number;
   zones: number;
@@ -10,6 +14,7 @@ export interface ImportCounters {
   monstres: number;
   monstreSorts: number;
   monstreDrops: number;
+  regionMonstres: number;
   equipements: number;
   lignesDegats: number;
   recettes: number;
