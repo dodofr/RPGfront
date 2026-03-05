@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { mapsApi } from '../../api/maps';
-import type { GameMap, MapConnection } from '../../types';
+import type { MapConnection } from '../../types';
 
 const GRID_WIDTH = 16;
 const GRID_HEIGHT = 18;
@@ -22,7 +22,6 @@ const GridEditorPage: React.FC = () => {
   const navigate = useNavigate();
   const [cells, setCells] = useState<Map<string, CellData>>(new Map());
   const [portals, setPortals] = useState<Map<string, PortalData>>(new Map());
-  const [allMaps, setAllMaps] = useState<GameMap[]>([]);
   const [originalConnections, setOriginalConnections] = useState<MapConnection[]>([]);
   const [portalNom, setPortalNom] = useState('');
   const [tool, setTool] = useState<Tool>('spawn-player');
@@ -37,8 +36,7 @@ const GridEditorPage: React.FC = () => {
     Promise.all([
       mapsApi.getGrid(Number(mapId)),
       mapsApi.getById(Number(mapId)),
-      mapsApi.getAll(),
-    ]).then(([grid, mapInfo, maps]) => {
+    ]).then(([grid, mapInfo]) => {
       const initial = new Map<string, CellData>();
       if (grid.cases) {
         for (const c of grid.cases) {
@@ -72,8 +70,6 @@ const GridEditorPage: React.FC = () => {
       }
       setPortals(initialPortals);
 
-      // Toutes les maps sauf la courante
-      setAllMaps(maps.filter(m => m.id !== Number(mapId)));
     }).catch(() => setError('Impossible de charger la grille'))
       .finally(() => setLoading(false));
   }, [mapId]);
@@ -130,23 +126,6 @@ const GridEditorPage: React.FC = () => {
 
     setCells(prev => {
       const next = new Map(prev);
-
-      if (tool === 'eraser') {
-        const deleted = next.get(key);
-        next.delete(key);
-        if (deleted && (deleted.type === 'spawn-player' || deleted.type === 'spawn-enemy')) {
-          const spawnType = deleted.type;
-          const spawns: { key: string; data: CellData & { type: typeof spawnType; ordre: number } }[] = [];
-          for (const [k, v] of next.entries()) {
-            if (v.type === spawnType) spawns.push({ key: k, data: v as any });
-          }
-          spawns.sort((a, b) => a.data.ordre - b.data.ordre);
-          spawns.forEach((s, i) => {
-            next.set(s.key, { type: spawnType, ordre: i + 1 });
-          });
-        }
-        return next;
-      }
 
       // Don't overwrite existing cell when dragging
       if (prev.has(key)) return prev;

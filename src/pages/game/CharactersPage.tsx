@@ -4,7 +4,8 @@ import { charactersApi, recipesApi } from '../../api/characters';
 import { playersApi } from '../../api/players';
 import { groupsApi } from '../../api/groups';
 import { racesApi, equipmentApi, passivesApi } from '../../api/static';
-import type { Character, Player, Race, Sort, Equipment, SlotType, InventoryState, Recette, MapType, CompetencePassive } from '../../types';
+import { queteApi } from '../../api/quetes';
+import type { Character, Player, Race, Sort, Equipment, SlotType, InventoryState, Recette, MapType, CompetencePassive, QuetePersonnage } from '../../types';
 import FormModal, { type FieldDef } from '../../components/FormModal';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import '../../styles/admin.css';
@@ -105,6 +106,7 @@ const CharactersPage: React.FC<CharactersPageProps> = ({ playerId: playerIdProp 
   const [sendError, setSendError] = useState<string | null>(null);
   const [recipes, setRecipes] = useState<Recette[]>([]);
   const [passives, setPassives] = useState<CompetencePassive[]>([]);
+  const [activeQuests, setActiveQuests] = useState<QuetePersonnage[]>([]);
   const [mapType, setMapType] = useState<MapType | null>(null);
   const [craftingId, setCraftingId] = useState<number | null>(null);
   const [craftMessage, setCraftMessage] = useState<string | null>(null);
@@ -196,14 +198,16 @@ const CharactersPage: React.FC<CharactersPageProps> = ({ playerId: playerIdProp 
   };
 
   const selectChar = async (id: number) => {
-    const [c, s, inv] = await Promise.all([
+    const [c, s, inv, quests] = await Promise.all([
       charactersApi.getById(id),
       charactersApi.getSpells(id),
       charactersApi.getInventory(id).catch(() => null),
+      queteApi.getActiveQuests(id).catch(() => []),
     ]);
     setSelected(c);
     setSpells(s as Sort[]);
     setInventory(inv);
+    setActiveQuests(quests);
   };
 
   const handleEquipItem = async (itemId: number) => {
@@ -558,9 +562,6 @@ const CharactersPage: React.FC<CharactersPageProps> = ({ playerId: playerIdProp 
                           {tmpl.degatsMin != null && tmpl.degatsMax != null && (
                             <span>{tmpl.degatsMin}-{tmpl.degatsMax} dmg</span>
                           )}
-                          {tmpl.degatsCritMin != null && tmpl.degatsCritMax != null && (
-                            <span style={{ marginLeft: 6 }}>({tmpl.degatsCritMin}-{tmpl.degatsCritMax} crit)</span>
-                          )}
                           {tmpl.coutPA != null && <span style={{ marginLeft: 6 }}>{tmpl.coutPA} PA</span>}
                           {tmpl.porteeMin != null && tmpl.porteeMax != null && (
                             <span style={{ marginLeft: 6 }}>{tmpl.porteeMin}-{tmpl.porteeMax} po</span>
@@ -744,6 +745,38 @@ const CharactersPage: React.FC<CharactersPageProps> = ({ playerId: playerIdProp 
               </>
             );
           })()}
+
+          {/* Quêtes actives */}
+          {selected && activeQuests.length > 0 && (
+            <>
+              <h3 className="section-title">Quêtes en cours ({activeQuests.length})</h3>
+              <div className="sort-list">
+                {activeQuests.map(qp => {
+                  const etape = qp.quete.etapes.find(e => e.ordre === qp.etapeActuelle);
+                  return (
+                    <div key={qp.id} className="sort-item">
+                      <div>
+                        <span className="sort-name">{qp.quete.nom}</span>
+                        <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--text-muted)' }}>
+                          Étape {qp.etapeActuelle}/{qp.quete.etapes.length}
+                        </span>
+                        {etape && (
+                          <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
+                            {etape.description}
+                            {etape.type === 'TUER_MONSTRE' && etape.quantite != null && (
+                              <span style={{ marginLeft: 6, color: 'var(--text-muted)' }}>
+                                ({qp.compteurEtape}/{etape.quantite})
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
 
           {/* Craft Section — only in VILLE/SAFE */}
           {canCraftInTown && inventory && recipes.length > 0 && (

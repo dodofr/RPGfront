@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { importApi, type ImportCounters } from '../../api/import';
+import { importApi, exportApi, type ImportCounters } from '../../api/import';
 
 interface ImportError {
   error: string;
@@ -25,6 +25,12 @@ const COUNTER_LABELS: Record<keyof ImportCounters, string> = {
   lignesDegats:      'Lignes de dégâts',
   recettes:          'Recettes',
   recetteIngredients:'Ingrédients recettes',
+  pnj:               'PNJ',
+  marchandLignes:    'Lignes marchands',
+  quetes:            'Quêtes',
+  queteEtapes:       'Étapes de quête',
+  queteRecompenses:  'Récompenses de quête',
+  quetePrerequisites:'Prérequis de quête',
 };
 
 const isValidJson = (s: string): boolean => {
@@ -34,6 +40,7 @@ const isValidJson = (s: string): boolean => {
 const ImportPage: React.FC = () => {
   const [json, setJson] = useState('');
   const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [result, setResult] = useState<ImportCounters | null>(null);
   const [error, setError] = useState<ImportError | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -73,6 +80,24 @@ const ImportPage: React.FC = () => {
     }
   };
 
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const pack = await exportApi.exportPack();
+      const blob = new Blob([JSON.stringify(pack, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `rpg-export-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setError({ error: 'Erreur lors de l\'export' });
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const jsonOk = json.length > 0 && isValidJson(json);
 
   return (
@@ -80,6 +105,9 @@ const ImportPage: React.FC = () => {
       <div className="page-header">
         <h1>Import en masse</h1>
         <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>POST /api/import</span>
+        <button className="btn btn-secondary" onClick={handleExport} disabled={exporting}>
+          {exporting ? 'Export…' : 'Exporter la BDD'}
+        </button>
       </div>
 
       <div className="import-layout">
@@ -156,7 +184,7 @@ const ImportPage: React.FC = () => {
             <div className="import-error">
               <div className="import-result-title error">✗ Erreur</div>
               <p className="import-error-msg">{error.error}</p>
-              {error.details && (
+              {!!error.details && (
                 <pre className="import-error-details">
                   {typeof error.details === 'string'
                     ? error.details
@@ -189,6 +217,8 @@ const ImportPage: React.FC = () => {
                   <tr><td>monstres</td><td>Templates avec sorts, drops et régions</td></tr>
                   <tr><td>equipements</td><td>Items avec lignes de dégâts</td></tr>
                   <tr><td>recettes</td><td>Recettes de craft</td></tr>
+                  <tr><td>pnj</td><td>PNJ avec catalogue marchand optionnel</td></tr>
+                  <tr><td>quetes</td><td>Quêtes avec étapes, récompenses et prérequis</td></tr>
                 </tbody>
               </table>
               <p style={{ marginTop: 12, color: 'var(--text-muted)', fontSize: 12 }}>

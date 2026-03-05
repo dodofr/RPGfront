@@ -84,7 +84,7 @@ const EquipementsPage: React.FC = () => {
   const handleCreate = async (nom: string, slot: SlotType) => {
     const created = await create({ nom, slot, niveauMinimum: 1, poids: 1 });
     setShowCreate(false);
-    navigate(`/admin/equipements/${created.id}`);
+    navigate(`/admin/equipements/${created!.id}`);
   };
 
   const formatStat = (item: Equipment, stat: string, max: string) => {

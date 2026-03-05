@@ -268,7 +268,7 @@ export interface MonsterTemplate {
   resistanceIntelligence: number;
   resistanceDexterite: number;
   resistanceAgilite: number;
-  regions?: { region: { id: number; nom: string } }[];
+  regions?: { regionId: number; probabilite: number; region: { id: number; nom: string } }[];
   sorts?: MonstreSort[];
   drops?: MonstreDrop[];
 }
@@ -637,6 +637,80 @@ export interface PNJ {
   positionY: number;
   estMarchand: boolean;
   lignes: MarchandLigne[];
+  quetesDepart?: { id: number; nom: string; niveauRequis: number }[];
+}
+
+// ============ Quêtes ============
+
+export type QueteEtapeType = 'PARLER_PNJ' | 'TUER_MONSTRE' | 'APPORTER_RESSOURCE' | 'APPORTER_EQUIPEMENT';
+export type QueteStatut = 'EN_COURS' | 'TERMINEE';
+
+export interface QueteEtape {
+  id: number;
+  queteId: number;
+  ordre: number;
+  description: string;
+  type: QueteEtapeType;
+  pnjId?: number | null;
+  pnj?: { id: number; nom: string } | null;
+  monstreTemplateId?: number | null;
+  monstreTemplate?: { id: number; nom: string } | null;
+  quantite?: number | null;
+  ressourceId?: number | null;
+  ressource?: { id: number; nom: string } | null;
+  equipementId?: number | null;
+  equipement?: { id: number; nom: string; slot: string } | null;
+}
+
+export interface QueteRecompense {
+  id: number;
+  queteId: number;
+  xp: number;
+  or: number;
+  ressourceId?: number | null;
+  ressource?: { id: number; nom: string } | null;
+  quantiteRessource?: number | null;
+  equipementId?: number | null;
+  equipement?: { id: number; nom: string } | null;
+}
+
+export interface Quete {
+  id: number;
+  nom: string;
+  description?: string | null;
+  niveauRequis: number;
+  pnjDepartId?: number | null;
+  pnjDepart?: { id: number; nom: string } | null;
+  etapes: QueteEtape[];
+  recompenses: QueteRecompense[];
+  prerequis?: { prerequisId: number; prerequis: { id: number; nom: string } }[];
+}
+
+export interface QuetePersonnage {
+  id: number;
+  queteId: number;
+  personnageId: number;
+  statut: QueteStatut;
+  etapeActuelle: number;
+  compteurEtape: number;
+  quete: Quete;
+}
+
+export interface InteractResponse {
+  quetesDisponibles: Quete[];
+  etapesEnAttente: QuetePersonnage[];
+  estMarchand: boolean;
+}
+
+export interface AdvanceQuestResponse {
+  quetePersonnage: QuetePersonnage;
+  questComplete: boolean;
+  recompenses?: {
+    xp: number;
+    or: number;
+    ressources: { nom: string; quantite: number }[];
+    items: { nom: string }[];
+  };
 }
 
 export interface CompetencePassive {

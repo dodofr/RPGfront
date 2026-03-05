@@ -719,7 +719,7 @@ const CombatPage: React.FC = () => {
                 })}
               </div>
               <div className="action-buttons">
-                {currentEntity?.armeData && (
+                {!!currentEntity?.armeData && (
                   <button className={`btn btn-sm ${weaponMode ? 'btn-primary' : 'btn-secondary'}`}
                     onClick={() => {
                       clearTargeting();

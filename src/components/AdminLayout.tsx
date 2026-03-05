@@ -8,6 +8,7 @@ const adminLinks = [
   { to: '/admin/objets', label: 'Objets', desc: 'Equipements, Ressources, Panoplies, Recettes' },
   { to: '/admin/passives', label: 'Passives', desc: 'Compétences passives par niveau' },
   { to: '/admin/pnj', label: 'PNJ', desc: 'Marchands et PNJ de map' },
+  { to: '/admin/quetes', label: 'Quêtes', desc: 'Quêtes multi-étapes et récompenses' },
   { to: '/admin/import', label: 'Import', desc: 'Import en masse par fichier JSON' },
 ];
 

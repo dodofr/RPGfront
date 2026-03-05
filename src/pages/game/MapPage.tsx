@@ -4,11 +4,11 @@ import { groupsApi } from '../../api/groups';
 import { mapsApi } from '../../api/maps';
 import { pnjApi } from '../../api/pnj';
 import { charactersApi } from '../../api/characters';
-import type { Group, GameMap, Direction, MapConnection, GroupeEnnemi, MapCase, PNJ, MarchandLigne, Character, InventoryState } from '../../types';
+import { queteApi } from '../../api/quetes';
+import type { Group, GameMap, Direction, MapConnection, GroupeEnnemi, MapCase, PNJ, Character, InventoryState, InteractResponse, QuetePersonnage, AdvanceQuestResponse } from '../../types';
 import '../../styles/index.css';
 
 const CELL_SIZE = 40;
-const MINIMAP_CELL = 48;
 
 // Build world grid layout from directional links using BFS
 function buildWorldGrid(maps: GameMap[]): { grid: Map<string, GameMap>; minX: number; minY: number; maxX: number; maxY: number } {
@@ -110,6 +110,11 @@ const MapPage: React.FC = () => {
   const [merchantFeedback, setMerchantFeedback] = useState<Record<string, { ok: boolean; msg: string }>>({});
   const [merchantChars, setMerchantChars] = useState<Character[]>([]);
   const [merchantInventory, setMerchantInventory] = useState<InventoryState | null>(null);
+
+  // Dialogue modal (quêtes PNJ)
+  const [dialogueModal, setDialogueModal] = useState<{ pnj: PNJ; interactData: InteractResponse; personnageId: number; chars: Character[] } | null>(null);
+  const [dialogueFeedback, setDialogueFeedback] = useState<string | null>(null);
+  const [dialogueRecompenses, setDialogueRecompenses] = useState<AdvanceQuestResponse['recompenses'] | null>(null);
 
   // Enemy group modal state (click on enemy cell → confirm before engaging)
   const [enemyModal, setEnemyModal] = useState<{ group: GroupeEnnemi } | null>(null);
@@ -262,7 +267,7 @@ const MapPage: React.FC = () => {
     setMoving(true);
     setDungeonModal(null);
     try {
-      const result = await groupsApi.useConnection(group.id, dungeonModal.connection.id, selectedDifficulty);
+      await groupsApi.useConnection(group.id, dungeonModal.connection.id, selectedDifficulty);
       // Dungeon entered - reload group (now on dungeon room map)
       await loadGroup(group.id);
     } catch (err: unknown) {
@@ -452,7 +457,7 @@ const MapPage: React.FC = () => {
         )}
 
         {/* NPC prompt when player is on an NPC cell */}
-        {playerOnNPC && playerOnNPC.estMarchand && (
+        {playerOnNPC && (
           <div style={{
             padding: '8px 16px', marginBottom: 8, borderRadius: 8,
             background: '#388e3c', color: 'white',
@@ -463,19 +468,29 @@ const MapPage: React.FC = () => {
               className="btn btn-sm"
               style={{ background: 'white', color: '#388e3c' }}
               onClick={async () => {
-                const full = await pnjApi.getById(playerOnNPC.id);
-                setMerchantModal(full);
-                setMerchantTab('buy');
-                setMerchantFeedback({});
-                setMerchantInventory(null);
-                // Load group characters for selector
-                const g = await groupsApi.getById(group.id);
-                const chars = g.personnages?.map((gp: any) => gp.personnage).filter(Boolean) ?? [];
-                setMerchantChars(chars);
-                if (chars.length > 0) {
-                  setMerchantPersonnageId(chars[0].id);
-                  const inv = await charactersApi.getInventory(chars[0].id);
-                  setMerchantInventory(inv);
+                const chars = (group?.personnages ?? []).map((gp: any) => gp.personnage).filter(Boolean) as Character[];
+                const firstCharId = chars[0]?.id ?? null;
+                if (!firstCharId) return;
+                try {
+                  const interactData = await queteApi.interact(playerOnNPC.id, firstCharId);
+                  setDialogueFeedback(null);
+                  setDialogueRecompenses(null);
+                  setDialogueModal({ pnj: playerOnNPC, interactData, personnageId: firstCharId, chars });
+                } catch {
+                  // Fallback: open merchant modal directly
+                  const full = await pnjApi.getById(playerOnNPC.id);
+                  setMerchantModal(full);
+                  setMerchantTab('buy');
+                  setMerchantFeedback({});
+                  setMerchantInventory(null);
+                  const g = await groupsApi.getById(group.id);
+                  const chars2 = g.personnages?.map((gp: any) => gp.personnage).filter(Boolean) ?? [];
+                  setMerchantChars(chars2);
+                  if (chars2.length > 0) {
+                    setMerchantPersonnageId(chars2[0].id);
+                    const inv = await charactersApi.getInventory(chars2[0].id);
+                    setMerchantInventory(inv);
+                  }
                 }
               }}
             >
@@ -800,6 +815,167 @@ const MapPage: React.FC = () => {
                 Entrer dans le donjon
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Dialogue modal (quêtes PNJ) */}
+      {dialogueModal && (
+        <div className="modal-overlay" onClick={() => setDialogueModal(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 520 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <h2 style={{ margin: 0 }}>💬 {dialogueModal.pnj.nom}</h2>
+              <button className="btn btn-secondary btn-sm" onClick={() => setDialogueModal(null)}>Fermer</button>
+            </div>
+
+            {/* Character selector */}
+            {dialogueModal.chars.length > 0 && (
+              <div style={{ marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <label style={{ fontWeight: 600, whiteSpace: 'nowrap', fontSize: 13 }}>Personnage :</label>
+                <select
+                  value={dialogueModal.personnageId}
+                  onChange={async (e) => {
+                    const id = Number(e.target.value);
+                    setDialogueFeedback(null);
+                    setDialogueRecompenses(null);
+                    const updated = await queteApi.interact(dialogueModal.pnj.id, id);
+                    setDialogueModal(prev => prev ? { ...prev, personnageId: id, interactData: updated } : null);
+                  }}
+                  style={{ flex: 1 }}
+                >
+                  {dialogueModal.chars.map(c => (
+                    <option key={c.id} value={c.id}>{c.nom} — Niv. {c.niveau}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {dialogueFeedback && (
+              <div style={{ padding: '8px 12px', marginBottom: 10, borderRadius: 6, background: '#1b5e20', color: 'white' }}>
+                {dialogueFeedback}
+              </div>
+            )}
+
+            {dialogueRecompenses && (
+              <div style={{ padding: '8px 12px', marginBottom: 10, borderRadius: 6, background: '#1a237e', color: 'white' }}>
+                <strong>Récompenses :</strong>
+                {dialogueRecompenses.xp > 0 && <div>{dialogueRecompenses.xp} XP</div>}
+                {dialogueRecompenses.or > 0 && <div>{dialogueRecompenses.or} or</div>}
+                {dialogueRecompenses.ressources.map((r, i) => <div key={i}>{r.quantite}x {r.nom}</div>)}
+                {dialogueRecompenses.items.map((it, i) => <div key={i}>Équip: {it.nom}</div>)}
+              </div>
+            )}
+
+            {/* Nouvelles quêtes disponibles */}
+            {dialogueModal.interactData.quetesDisponibles.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <h4 style={{ margin: '0 0 8px', color: 'var(--text-muted)' }}>NOUVELLES QUÊTES</h4>
+                {dialogueModal.interactData.quetesDisponibles.map(q => (
+                  <div key={q.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', background: 'var(--bg-secondary)', borderRadius: 6, marginBottom: 6 }}>
+                    <div>
+                      <strong>{q.nom}</strong>
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{q.description}</div>
+                    </div>
+                    <button
+                      className="btn btn-primary btn-sm"
+                      onClick={async () => {
+                        try {
+                          await queteApi.acceptQuest(dialogueModal.pnj.id, dialogueModal.personnageId, q.id);
+                          setDialogueFeedback(`Quête "${q.nom}" acceptée !`);
+                          const updated = await queteApi.interact(dialogueModal.pnj.id, dialogueModal.personnageId);
+                          setDialogueModal(prev => prev ? { ...prev, interactData: updated } : null);
+                        } catch (e: any) {
+                          setDialogueFeedback(e?.response?.data?.error || 'Erreur');
+                        }
+                      }}
+                    >
+                      Accepter
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Étapes en attente */}
+            {dialogueModal.interactData.etapesEnAttente.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <h4 style={{ margin: '0 0 8px', color: 'var(--text-muted)' }}>OBJECTIFS EN ATTENTE</h4>
+                {dialogueModal.interactData.etapesEnAttente.map((qp: QuetePersonnage) => {
+                  const etape = qp.quete.etapes.find(e => e.ordre === qp.etapeActuelle);
+                  return (
+                    <div key={qp.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '8px 10px', background: 'var(--bg-secondary)', borderRadius: 6, marginBottom: 6 }}>
+                      <div>
+                        <strong>{qp.quete.nom}</strong>
+                        <div style={{ fontSize: 12 }}>Étape {qp.etapeActuelle}/{qp.quete.etapes.length} : {etape?.description}</div>
+                        {etape?.type === 'APPORTER_RESSOURCE' && etape.ressource && (
+                          <div style={{ fontSize: 12, color: 'var(--warning)', marginTop: 2 }}>
+                            Requis : {etape.quantite ?? 1}× {etape.ressource.nom}
+                          </div>
+                        )}
+                        {etape?.type === 'APPORTER_EQUIPEMENT' && etape.equipement && (
+                          <div style={{ fontSize: 12, color: '#66bb6a', marginTop: 2 }}>
+                            Requis : {etape.quantite ?? 1}× {etape.equipement.nom}
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        className="btn btn-primary btn-sm"
+                        style={{ marginLeft: 8, flexShrink: 0 }}
+                        onClick={async () => {
+                          try {
+                            const result = await queteApi.advanceQuest(dialogueModal.pnj.id, dialogueModal.personnageId, qp.id);
+                            if (result.questComplete) {
+                              setDialogueFeedback(`Quête "${qp.quete.nom}" terminée !`);
+                              setDialogueRecompenses(result.recompenses ?? null);
+                            } else {
+                              setDialogueFeedback('Étape accomplie !');
+                            }
+                            const updated = await queteApi.interact(dialogueModal.pnj.id, dialogueModal.personnageId);
+                            setDialogueModal(prev => prev ? { ...prev, interactData: updated } : null);
+                          } catch (e: any) {
+                            setDialogueFeedback(e?.response?.data?.error || 'Erreur');
+                          }
+                        }}
+                      >
+                        {(etape?.type === 'APPORTER_RESSOURCE' || etape?.type === 'APPORTER_EQUIPEMENT') ? 'Remettre' : 'Continuer'}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {dialogueModal.interactData.quetesDisponibles.length === 0 && dialogueModal.interactData.etapesEnAttente.length === 0 && !dialogueFeedback && (
+              <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: 12 }}>Pas de quête disponible pour l'instant.</p>
+            )}
+
+            {/* Bouton boutique si marchand */}
+            {dialogueModal.interactData.estMarchand && (
+              <div style={{ marginTop: 12, borderTop: '1px solid var(--border-color)', paddingTop: 12 }}>
+                <button
+                  className="btn btn-secondary"
+                  style={{ width: '100%' }}
+                  onClick={async () => {
+                    const full = await pnjApi.getById(dialogueModal.pnj.id);
+                    setMerchantModal(full);
+                    setMerchantTab('buy');
+                    setMerchantFeedback({});
+                    setMerchantInventory(null);
+                    const g = await groupsApi.getById(group.id);
+                    const chars = g.personnages?.map((gp: any) => gp.personnage).filter(Boolean) ?? [];
+                    setMerchantChars(chars);
+                    if (chars.length > 0) {
+                      setMerchantPersonnageId(chars[0].id);
+                      const inv = await charactersApi.getInventory(chars[0].id);
+                      setMerchantInventory(inv);
+                    }
+                    setDialogueModal(null);
+                  }}
+                >
+                  Ouvrir la boutique
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

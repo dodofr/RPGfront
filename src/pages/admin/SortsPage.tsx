@@ -229,10 +229,10 @@ const SortsPage: React.FC = () => {
       })
     : filteredItems;
 
-  const handleCreate = async (nom: string, payload: Partial<Sort>) => {
+  const handleCreate = async (_nom: string, payload: Partial<Sort>) => {
     const created = await create(payload);
     setShowCreate(false);
-    navigate(`/admin/sorts/${created.id}`);
+    navigate(`/admin/sorts/${created!.id}`);
   };
 
   const columns: Column<Sort>[] = [

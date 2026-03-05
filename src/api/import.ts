@@ -19,6 +19,12 @@ export interface ImportCounters {
   lignesDegats: number;
   recettes: number;
   recetteIngredients: number;
+  pnj: number;
+  marchandLignes: number;
+  quetes: number;
+  queteEtapes: number;
+  queteRecompenses: number;
+  quetePrerequisites: number;
 }
 
 export interface ImportResult {
@@ -29,4 +35,8 @@ export interface ImportResult {
 export const importApi = {
   importPack: (pack: unknown) =>
     api.post<ImportResult>('/import', pack).then(r => r.data),
+};
+
+export const exportApi = {
+  exportPack: () => api.get<unknown>('/export').then(r => r.data),
 };

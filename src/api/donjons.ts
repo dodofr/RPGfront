@@ -4,7 +4,7 @@ import type { Donjon, DonjonSalleComposition } from '../types';
 export const donjonsApi = {
   getAll: () => api.get<Donjon[]>('/donjons').then(r => r.data),
   getById: (id: number) => api.get<Donjon>(`/donjons/${id}`).then(r => r.data),
-  create: (data: Partial<Donjon> & { salles: { ordre: number; mapId: number }[] }) =>
+  create: (data: Partial<Donjon>) =>
     api.post<Donjon>('/donjons', data).then(r => r.data),
   update: (id: number, data: Partial<Donjon>) =>
     api.patch<Donjon>(`/donjons/${id}`, data).then(r => r.data),

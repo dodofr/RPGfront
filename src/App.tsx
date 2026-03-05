@@ -18,7 +18,10 @@ import SortDetailPage from './pages/admin/SortDetailPage'
 import EquipementDetailPage from './pages/admin/EquipementDetailPage'
 import PassivesPage from './pages/admin/PassivesPage'
 import PNJPage from './pages/admin/PNJPage'
+import PNJDetailPage from './pages/admin/PNJDetailPage'
 import ImportPage from './pages/admin/ImportPage'
+import QuetesPage from './pages/admin/QuetesPage'
+import QueteDetailPage from './pages/admin/QueteDetailPage'
 
 // Game pages
 import PlayersPage from './pages/game/PlayersPage'
@@ -57,7 +60,10 @@ const router = createBrowserRouter([
       { path: 'equipements/:id', element: <EquipementDetailPage /> },
       { path: 'passives', element: <PassivesPage /> },
       { path: 'pnj', element: <PNJPage /> },
+      { path: 'pnj/:id', element: <PNJDetailPage /> },
       { path: 'import', element: <ImportPage /> },
+      { path: 'quetes', element: <QuetesPage /> },
+      { path: 'quetes/:id', element: <QueteDetailPage /> },
     ],
   },
 ])

@@ -112,7 +112,7 @@ const MonstresPage: React.FC = () => {
     };
     const created = await create(payload);
     setShowCreate(false);
-    navigate(`/admin/monstres/${created.id}`);
+    navigate(`/admin/monstres/${created!.id}`);
   };
 
   const columns: Column<MonsterTemplate>[] = [
