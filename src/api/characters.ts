@@ -1,5 +1,5 @@
 import api from './client';
-import type { Character, InventoryState, SlotType, Recette } from '../types';
+import type { Character, InventoryState, SlotType, Recette, Direction } from '../types';
 
 export const charactersApi = {
   getAll: () => api.get<Character[]>('/characters').then(r => r.data),
@@ -36,6 +36,18 @@ export const charactersApi = {
   // Craft
   craft: (id: number, recetteId: number) =>
     api.post(`/characters/${id}/craft/${recetteId}`).then(r => r.data),
+
+  // Navigation solo
+  navEnterMap: (id: number, mapId: number, startX?: number, startY?: number) =>
+    api.post(`/characters/${id}/enter-map`, { mapId, ...(startX !== undefined ? { startX } : {}), ...(startY !== undefined ? { startY } : {}) }).then(r => r.data),
+  navMove: (id: number, x: number, y: number) =>
+    api.patch(`/characters/${id}/move`, { x, y }).then(r => r.data),
+  navMoveDirection: (id: number, direction: Direction) =>
+    api.post(`/characters/${id}/move-direction`, { direction }).then(r => r.data),
+  navUseConnection: (id: number, connectionId: number, destinationConnectionId?: number, difficulte?: number) =>
+    api.post(`/characters/${id}/use-connection`, { connectionId, ...(destinationConnectionId ? { destinationConnectionId } : {}), ...(difficulte ? { difficulte } : {}) }).then(r => r.data),
+  navLeaveMap: (id: number) =>
+    api.post(`/characters/${id}/leave-map`).then(r => r.data),
 };
 
 export const recipesApi = {

@@ -3,7 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { pnjApi } from '../../api/pnj';
 import { mapsApi } from '../../api/maps';
 import { equipmentApi, resourcesApi } from '../../api/static';
-import type { PNJ, MarchandLigne, GameMap, Equipment, Ressource } from '../../types';
+import { queteApi } from '../../api/quetes';
+import type { PNJ, MarchandLigne, GameMap, Equipment, Ressource, PNJDialogue, DialogueType, Quete } from '../../types';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import '../../styles/admin.css';
 
@@ -15,6 +16,7 @@ const PNJDetailPage: React.FC = () => {
   const [maps, setMaps] = useState<GameMap[]>([]);
   const [equipements, setEquipements] = useState<Equipment[]>([]);
   const [ressources, setRessources] = useState<Ressource[]>([]);
+  const [quetes, setQuetes] = useState<Quete[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,6 +32,16 @@ const PNJDetailPage: React.FC = () => {
   // Confirmations
   const [deletingPnj, setDeletingPnj] = useState(false);
   const [deletingLigne, setDeletingLigne] = useState<MarchandLigne | null>(null);
+  const [deletingDialogue, setDeletingDialogue] = useState<PNJDialogue | null>(null);
+
+  // Formulaire ajout dialogue
+  const [showAddDialogue, setShowAddDialogue] = useState(false);
+  const [dialogueType, setDialogueType] = useState<DialogueType>('ACCUEIL');
+  const [dialogueTexte, setDialogueTexte] = useState('');
+  const [dialogueOrdre, setDialogueOrdre] = useState<number>(0);
+  const [dialogueQueteId, setDialogueQueteId] = useState<number | ''>('');
+  const [dialogueEtapeOrdre, setDialogueEtapeOrdre] = useState<number | ''>('');
+  const [editingDialogue, setEditingDialogue] = useState<{ id: number; texte: string; type: DialogueType; ordre: number; queteId: number | null; etapeOrdre: number | null } | null>(null);
 
   // Formulaire ajout ligne
   const [showAddLigne, setShowAddLigne] = useState(false);
@@ -58,6 +70,7 @@ const PNJDetailPage: React.FC = () => {
       mapsApi.getAll().then(setMaps),
       equipmentApi.getAll().then(setEquipements),
       resourcesApi.getAll().then(setRessources),
+      queteApi.getAll().then(setQuetes),
     ]).finally(() => setLoading(false));
   }, [loadPnj]);
 
@@ -121,6 +134,54 @@ const PNJDetailPage: React.FC = () => {
     if (!pnj || !deletingLigne) return;
     await pnjApi.deleteLigne(pnj.id, deletingLigne.id);
     setDeletingLigne(null);
+    await loadPnj();
+  };
+
+  const handleAddDialogue = async () => {
+    if (!pnj || !dialogueTexte.trim()) return;
+    setSaving(true);
+    try {
+      await pnjApi.addDialogue(pnj.id, {
+        type: dialogueType,
+        texte: dialogueTexte,
+        ordre: dialogueOrdre,
+        queteId: dialogueQueteId !== '' ? Number(dialogueQueteId) : null,
+        etapeOrdre: dialogueEtapeOrdre !== '' ? Number(dialogueEtapeOrdre) : null,
+      });
+      await loadPnj();
+      setShowAddDialogue(false);
+      setDialogueTexte('');
+      setDialogueOrdre(0);
+      setDialogueQueteId('');
+      setDialogueEtapeOrdre('');
+    } catch (e: any) {
+      setError(e?.response?.data?.error || 'Erreur');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleUpdateDialogue = async () => {
+    if (!pnj || !editingDialogue) return;
+    try {
+      await pnjApi.updateDialogue(pnj.id, editingDialogue.id, {
+        type: editingDialogue.type,
+        texte: editingDialogue.texte,
+        ordre: editingDialogue.ordre,
+        queteId: editingDialogue.queteId,
+        etapeOrdre: editingDialogue.etapeOrdre,
+      });
+      await loadPnj();
+      setEditingDialogue(null);
+    } catch (e: any) {
+      setError(e?.response?.data?.error || 'Erreur');
+    }
+  };
+
+  const handleDeleteDialogue = async () => {
+    if (!pnj || !deletingDialogue) return;
+    await pnjApi.deleteDialogue(pnj.id, deletingDialogue.id);
+    setDeletingDialogue(null);
     await loadPnj();
   };
 
@@ -245,6 +306,115 @@ const PNJDetailPage: React.FC = () => {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+        </div>
+
+        {/* ── Section dialogues ── */}
+        <div className="detail-page-section" style={{ alignSelf: 'start' }}>
+          <div className="detail-page-section-header">
+            <h3>Dialogues {pnj.dialogues && pnj.dialogues.length > 0 && <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 400 }}>({pnj.dialogues.length})</span>}</h3>
+            <button className="btn btn-primary btn-sm" onClick={() => setShowAddDialogue(v => !v)}>
+              {showAddDialogue ? 'Annuler' : '+ Ajouter'}
+            </button>
+          </div>
+
+          {showAddDialogue && (
+            <div style={{ padding: 12, background: 'var(--bg)', border: '1px solid var(--primary)', borderRadius: 6, marginBottom: 12 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, marginBottom: 8 }}>
+                <select value={dialogueType} onChange={e => setDialogueType(e.target.value as DialogueType)}>
+                  <option value="ACCUEIL">ACCUEIL (contenu dispo)</option>
+                  <option value="SANS_INTERACTION">SANS_INTERACTION (rien)</option>
+                </select>
+                <select value={dialogueQueteId} onChange={e => { setDialogueQueteId(e.target.value ? Number(e.target.value) : ''); setDialogueEtapeOrdre(''); }}>
+                  <option value="">— Aucune quête (générique) —</option>
+                  {quetes.map(q => <option key={q.id} value={q.id}>{q.nom}</option>)}
+                </select>
+                <input
+                  type="number" min={1}
+                  value={dialogueEtapeOrdre}
+                  onChange={e => setDialogueEtapeOrdre(e.target.value ? Number(e.target.value) : '')}
+                  placeholder="Étape"
+                  disabled={!dialogueQueteId}
+                  title="Numéro d'étape (laisser vide = toute la quête)"
+                  style={{ width: 70 }}
+                />
+              </div>
+              {dialogueQueteId && (
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>
+                  {dialogueEtapeOrdre ? `Affiché à l'étape ${dialogueEtapeOrdre} de cette quête` : 'Affiché pendant toute la durée de cette quête'}
+                </div>
+              )}
+              <textarea
+                value={dialogueTexte}
+                rows={3}
+                onChange={e => setDialogueTexte(e.target.value)}
+                placeholder="Texte du dialogue..."
+                style={{ width: '100%', boxSizing: 'border-box', resize: 'vertical', padding: '6px 8px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontSize: 13 }}
+              />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+                <div style={{ display: 'flex', gap: 4, alignItems: 'center', fontSize: 12, color: 'var(--text-muted)' }}>
+                  Ordre : <input type="number" min={0} value={dialogueOrdre} onChange={e => setDialogueOrdre(Number(e.target.value))} style={{ width: 50, marginLeft: 4 }} />
+                </div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button className="btn btn-secondary btn-sm" onClick={() => setShowAddDialogue(false)}>Annuler</button>
+                  <button className="btn btn-primary btn-sm" onClick={handleAddDialogue} disabled={saving}>Ajouter</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {(!pnj.dialogues || pnj.dialogues.length === 0) && !showAddDialogue && (
+            <div style={{ textAlign: 'center', padding: '20px 0', color: 'var(--text-muted)', fontSize: 13, fontStyle: 'italic' }}>
+              Aucun dialogue. Cliquez "+ Ajouter" pour en créer.
+            </div>
+          )}
+
+          {pnj.dialogues && pnj.dialogues.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {pnj.dialogues.map((d: PNJDialogue) => (
+                <div key={d.id} style={{ padding: '8px 10px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 6 }}>
+                  {editingDialogue?.id === d.id ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 6 }}>
+                        <select value={editingDialogue.type} onChange={e => setEditingDialogue(prev => prev ? { ...prev, type: e.target.value as DialogueType } : null)}>
+                          <option value="ACCUEIL">ACCUEIL</option>
+                          <option value="SANS_INTERACTION">SANS_INTERACTION</option>
+                        </select>
+                        <select value={editingDialogue.queteId ?? ''} onChange={e => setEditingDialogue(prev => prev ? { ...prev, queteId: e.target.value ? Number(e.target.value) : null, etapeOrdre: null } : null)}>
+                          <option value="">— Aucune quête —</option>
+                          {quetes.map(q => <option key={q.id} value={q.id}>{q.nom}</option>)}
+                        </select>
+                        <input type="number" min={1} value={editingDialogue.etapeOrdre ?? ''} onChange={e => setEditingDialogue(prev => prev ? { ...prev, etapeOrdre: e.target.value ? Number(e.target.value) : null } : null)} placeholder="Étape" disabled={!editingDialogue.queteId} style={{ width: 70 }} />
+                      </div>
+                      <textarea value={editingDialogue.texte} rows={2} onChange={e => setEditingDialogue(prev => prev ? { ...prev, texte: e.target.value } : null)} style={{ width: '100%', boxSizing: 'border-box', fontSize: 12, padding: '4px 6px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)' }} />
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
+                        <button className="btn btn-primary btn-sm" onClick={handleUpdateDialogue}>OK</button>
+                        <button className="btn btn-secondary btn-sm" onClick={() => setEditingDialogue(null)}>Annuler</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', gap: 6, marginBottom: 4, flexWrap: 'wrap' }}>
+                          <span className={`badge ${d.type === 'ACCUEIL' ? 'badge-info' : 'badge-muted'}`} style={{ fontSize: 10 }}>{d.type}</span>
+                          {d.queteId && (
+                            <span className="badge badge-secondary" style={{ fontSize: 10 }}>
+                              {quetes.find(q => q.id === d.queteId)?.nom ?? `Quête #${d.queteId}`}
+                              {d.etapeOrdre ? ` — étape ${d.etapeOrdre}` : ' (toute la quête)'}
+                            </span>
+                          )}
+                        </div>
+                        <span style={{ fontStyle: 'italic', color: 'var(--text-muted)', fontSize: 13 }}>"{d.texte}"</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                        <button className="btn btn-secondary btn-sm" onClick={() => setEditingDialogue({ id: d.id, texte: d.texte, type: d.type, ordre: d.ordre, queteId: d.queteId ?? null, etapeOrdre: d.etapeOrdre ?? null })}>✎</button>
+                        <button className="btn btn-danger btn-sm" onClick={() => setDeletingDialogue(d)}>✕</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -381,6 +551,12 @@ const PNJDetailPage: React.FC = () => {
         message="Supprimer cet article du marchand ?"
         onConfirm={handleDeleteLigne}
         onCancel={() => setDeletingLigne(null)}
+      />
+      <ConfirmDialog
+        open={!!deletingDialogue}
+        message="Supprimer ce dialogue ?"
+        onConfirm={handleDeleteDialogue}
+        onCancel={() => setDeletingDialogue(null)}
       />
     </div>
   );

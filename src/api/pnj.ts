@@ -1,5 +1,5 @@
 import api from './client';
-import type { PNJ, MarchandLigne } from '../types';
+import type { PNJ, MarchandLigne, PNJDialogue, PnjStatusEntry } from '../types';
 
 export const pnjApi = {
   getAll: () => api.get<PNJ[]>('/pnj').then(r => r.data),
@@ -16,4 +16,11 @@ export const pnjApi = {
   sell: (id: number, data: { personnageId: number; ligneId: number; quantite?: number; itemId?: number }) =>
     api.post(`/pnj/${id}/sell`, data).then(r => r.data),
   getByMap: (mapId: number) => api.get<PNJ[]>(`/maps/${mapId}/pnj`).then(r => r.data),
+  getMapStatus: (mapId: number, personnageIds: number[]) =>
+    api.get<PnjStatusEntry[]>(`/pnj/map-status?mapId=${mapId}&personnageIds=${personnageIds.join(',')}`).then(r => r.data),
+  addDialogue: (id: number, data: { type: string; texte: string; ordre?: number; queteId?: number | null; etapeOrdre?: number | null }) =>
+    api.post<PNJDialogue>(`/pnj/${id}/dialogues`, data).then(r => r.data),
+  updateDialogue: (id: number, dialogueId: number, data: { type?: string; texte?: string; ordre?: number; queteId?: number | null; etapeOrdre?: number | null }) =>
+    api.patch<PNJDialogue>(`/pnj/${id}/dialogues/${dialogueId}`, data).then(r => r.data),
+  deleteDialogue: (id: number, dialogueId: number) => api.delete(`/pnj/${id}/dialogues/${dialogueId}`),
 };

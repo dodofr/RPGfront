@@ -485,93 +485,66 @@ body {
 }
 
 /* ==================== Adventure Map ==================== */
-.adventure-layout {
-  display: flex;
-  gap: 24px;
-  align-items: flex-start;
-}
-
-.adventure-main {
-  flex: 1;
-  min-width: 0;
-}
-
-.adventure-sidebar {
-  width: 260px;
-  flex-shrink: 0;
-  background: var(--bg-light);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 16px;
-  position: sticky;
-  top: 24px;
-  max-height: calc(100vh - 48px);
-  overflow-y: auto;
-}
-
-.adventure-sidebar h3 {
-  color: var(--primary);
-  margin-bottom: 12px;
-  font-size: 16px;
-}
-
-.adventure-sidebar h4 {
-  font-size: 13px;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.adventure-info {
-  margin-top: 8px;
-  font-size: 13px;
-  line-height: 1.8;
-}
-
-.adventure-enemies {
-  margin-top: 8px;
+.adv-page {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  height: calc(100vh - 48px);
+  overflow: hidden;
 }
 
-.adventure-enemy-card {
+.adv-header {
+  height: 44px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  background: var(--bg-light);
+  border-bottom: 1px solid var(--border);
+}
+
+.adv-breadcrumb { font-weight: 700; font-size: 15px; color: var(--primary); }
+.adv-header-meta { font-size: 12px; color: var(--text-muted); }
+
+.adv-main {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.adv-left {
+  width: 100px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 6px;
+  border-right: 1px solid var(--border);
+  background: var(--bg-light);
+}
+
+.adv-member-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 4px;
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 6px;
-  padding: 8px;
-}
-
-/* Group member portraits */
-.adventure-group-members {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-top: 4px;
-}
-
-.adventure-member-card {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 8px 10px;
   cursor: pointer;
-  text-align: left;
   width: 100%;
-  transition: border-color 0.15s, background 0.15s;
+  text-align: center;
+  position: relative;
 }
 
-.adventure-member-card:hover {
-  border-color: var(--primary);
-  background: rgba(25, 118, 210, 0.08);
-}
+.adv-member-card:hover { border-color: var(--primary); }
 
-.adventure-member-portrait {
-  width: 36px;
-  height: 36px;
+.adv-member-initial {
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   background: var(--primary);
   color: white;
@@ -579,62 +552,110 @@ body {
   align-items: center;
   justify-content: center;
   font-weight: 700;
-  font-size: 15px;
+  font-size: 13px;
   flex-shrink: 0;
 }
 
-.adventure-member-info {
+.adv-member-name { font-size: 10px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%; }
+.adv-member-level { font-size: 9px; color: var(--text-muted); }
+.adv-member-xp { font-size: 9px; color: var(--warning); }
+
+.adv-grid-container {
   flex: 1;
-  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
 }
 
-.adventure-member-name {
-  font-weight: 600;
-  font-size: 13px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.adv-right {
+  width: 240px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  border-left: 1px solid var(--border);
+  background: var(--bg-light);
 }
 
-.adventure-member-meta {
+.adv-panel-section { display: flex; flex-direction: column; gap: 4px; }
+.adv-panel-section h4 {
   font-size: 11px;
   color: var(--text-muted);
-  margin-top: 1px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 0 0 4px;
+}
+
+.adv-panel-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.adv-bottom-bar {
+  height: 80px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-light);
+}
+
+.adv-bottom-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; flex-shrink: 0; }
+
+.adv-bottom-info {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 12px;
+  height: 60px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  font-size: 12px;
+  overflow: hidden;
 }
 
 /* Grid */
-.adventure-grid-container {
-  overflow: auto;
-  margin-top: 16px;
-  padding: 8px;
-  background: var(--bg-light);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-}
-
 .adventure-grid {
   display: grid;
-  gap: 1px;
-  width: fit-content;
+  gap: 0;
+  background: var(--bg);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 4px;
+  flex-shrink: 0;
 }
 
 .adventure-cell {
-  width: 40px;
-  height: 40px;
+  min-width: 0;
+  min-height: 0;
   background: var(--bg);
-  border: 1px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background 0.1s, border-color 0.1s;
+  transition: background 0.1s;
   position: relative;
   font-size: 12px;
+  overflow: visible;
+  border-right: 1px solid rgba(255,255,255,0.05);
+  border-bottom: 1px solid rgba(255,255,255,0.05);
 }
 
 .adventure-cell:hover {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 /* Cell types */
@@ -647,42 +668,42 @@ body {
     #2e2e2e 3px,
     #2e2e2e 7px
   ) !important;
-  border-color: #3a3a3a !important;
+  border: 1px solid #3a3a3a !important;
   cursor: not-allowed;
 }
 
 /* Obstacle LDV + PM : mur plein, rien ne passe */
 .cell-obstacle-los {
   background: #0d0d0d !important;
-  border-color: #1a1a1a !important;
+  border: 1px solid #1a1a1a !important;
   cursor: not-allowed;
 }
 
 .cell-player {
   background: rgba(76, 175, 80, 0.25) !important;
-  border-color: var(--success) !important;
+  border: 1px solid var(--success) !important;
 }
 
 .cell-player .cell-icon {
   color: var(--success);
   font-weight: bold;
-  font-size: 16px;
+  font-size: clamp(8px, 1vw, 18px);
 }
 
 .cell-enemy {
   background: rgba(233, 69, 96, 0.2) !important;
-  border-color: var(--danger) !important;
+  border: 1px solid var(--danger) !important;
 }
 
 .cell-enemy .cell-icon {
   color: var(--danger);
   font-weight: bold;
-  font-size: 16px;
+  font-size: clamp(8px, 1vw, 18px);
 }
 
 .cell-ally {
   background: rgba(21, 101, 192, 0.35) !important;
-  border-color: #1565c0 !important;
+  border: 1px solid #1565c0 !important;
 }
 
 .cell-ally .cell-icon {
@@ -693,7 +714,7 @@ body {
 
 .cell-edge {
   background: rgba(255, 152, 0, 0.1) !important;
-  border-color: rgba(255, 152, 0, 0.4) !important;
+  border: 1px solid rgba(255, 152, 0, 0.4) !important;
 }
 
 .cell-edge:hover {
@@ -710,44 +731,6 @@ body {
   opacity: 1;
 }
 
-/* Legend */
-.adventure-legend {
-  margin-top: 8px;
-  font-size: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.legend-icon {
-  display: inline-flex;
-  width: 22px;
-  height: 22px;
-  align-items: center;
-  justify-content: center;
-  border-radius: 4px;
-  font-weight: bold;
-  font-size: 11px;
-  margin-right: 6px;
-}
-
-.legend-player {
-  background: rgba(76, 175, 80, 0.25);
-  color: var(--success);
-  border: 1px solid var(--success);
-}
-
-.legend-enemy {
-  background: rgba(233, 69, 96, 0.2);
-  color: var(--danger);
-  border: 1px solid var(--danger);
-}
-
-.legend-edge {
-  background: rgba(255, 152, 0, 0.1);
-  color: var(--warning);
-  border: 1px solid rgba(255, 152, 0, 0.4);
-}
 
 /* ==================== World Map Modal ==================== */
 .worldmap-modal {

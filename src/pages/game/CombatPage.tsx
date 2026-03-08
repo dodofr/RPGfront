@@ -888,93 +888,30 @@ const CombatPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Right panel: entity panel only */}
+        {/* Right panel: journal */}
         <div className="combat-right-panel">
-          <div className="entity-panel">
-            <h4>{selectedEntity?.nom || currentEntity?.nom || '---'}</h4>
-            {(() => {
-              const ent = selectedEntity || currentEntity;
-              if (!ent) return null;
-              const hpPct = (ent.pvActuels / ent.pvMax) * 100;
-              const effects = getEntityEffects(ent.id);
-              return (
-                <>
-                  <div className="bars">
-                    <div className="bar-label"><span>PV</span><span>{ent.pvActuels}/{ent.pvMax}</span></div>
-                    <div className="stat-bar hp-bar"><div className="stat-bar-fill" style={{ width: `${hpPct}%` }} /></div>
-                    <div className="bar-label" style={{ marginTop: 4 }}><span>PA</span><span>{ent.paActuels}/{ent.paMax}</span></div>
-                    <div className="stat-bar pa-bar"><div className="stat-bar-fill" style={{ width: `${(ent.paActuels / ent.paMax) * 100}%` }} /></div>
-                    <div className="bar-label" style={{ marginTop: 4 }}><span>PM</span><span>{ent.pmActuels}/{ent.pmMax}</span></div>
-                    <div className="stat-bar pm-bar"><div className="stat-bar-fill" style={{ width: `${(ent.pmActuels / ent.pmMax) * 100}%` }} /></div>
-                  </div>
-                  <div className="stat-row"><span className="label">FOR</span><span>{ent.stats.force}</span></div>
-                  <div className="stat-row"><span className="label">INT</span><span>{ent.stats.intelligence}</span></div>
-                  <div className="stat-row"><span className="label">DEX</span><span>{ent.stats.dexterite}</span></div>
-                  <div className="stat-row"><span className="label">AGI</span><span>{ent.stats.agilite}</span></div>
-                  <div className="stat-row"><span className="label">VIE</span><span>{ent.stats.vie}</span></div>
-                  <div className="stat-row"><span className="label">CHA</span><span>{ent.stats.chance}</span></div>
-                  {(() => {
-                    const allEffets = combat.effetsActifs || [];
-                    const resistRows = RESIST_STATS
-                      .map(([label, stat]) => [label, calcEffectiveResistance(ent.id, ent, stat, allEffets)] as [string, number])
-                      .filter(([, v]) => v !== 0);
-                    if (resistRows.length === 0) return null;
-                    return (
-                      <div style={{ marginTop: 4, paddingTop: 4, borderTop: '1px solid var(--border)' }}>
-                        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>Résistances</div>
-                        {resistRows.map(([label, val]) => (
-                          <div key={label} className="stat-row">
-                            <span className="label">r{label}</span>
-                            <span style={{ color: val > 0 ? 'var(--success)' : 'var(--danger)' }}>
-                              {val > 0 ? '+' : ''}{val}%
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    );
-                  })()}
-                  {((ent.bonusDommages ?? 0) > 0 || (ent.bonusSoins ?? 0) > 0) && (
-                    <div style={{ marginTop: 4, paddingTop: 4, borderTop: '1px solid var(--border)' }}>
-                      <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>Bonus combat</div>
-                      {(ent.bonusDommages ?? 0) > 0 && (
-                        <div className="stat-row">
-                          <span className="label">DMG+</span>
-                          <span style={{ color: 'var(--success)' }}>+{ent.bonusDommages}</span>
-                        </div>
-                      )}
-                      {(ent.bonusSoins ?? 0) > 0 && (
-                        <div className="stat-row">
-                          <span className="label">SOIN+</span>
-                          <span style={{ color: 'var(--success)' }}>+{ent.bonusSoins}</span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  {effects.length > 0 && (
-                    <div className="effects-list">
-                      {effects.map(ef => {
-                        const isPoisonEf = ef.type === 'POISON';
-                        const isResistEf = ef.type === 'RESISTANCE';
-                        const STAT_ABBR: Record<string, string> = { FORCE: 'FOR', INTELLIGENCE: 'INT', DEXTERITE: 'DEX', AGILITE: 'AGI' };
-                        const detail = isPoisonEf
-                          ? `${ef.valeurMin ?? ef.valeur}-${ef.valeur} dgts/tour`
-                          : isResistEf
-                            ? `r${STAT_ABBR[ef.statCiblee] || ef.statCiblee} ${ef.valeur > 0 ? '+' : ''}${ef.valeur}%`
-                            : `${STAT_LABELS[ef.statCiblee] || ef.statCiblee} ${ef.valeur > 0 ? '+' : ''}${ef.valeur}`;
-                        return (
-                          <span key={ef.id} className={`effect-tag ${ef.type?.toLowerCase() || ''}`} title={detail}>
-                            {ef.nom || `Effet #${ef.effetId}`} ({ef.toursRestants}t)
-                            <span className="effect-detail"> {detail}</span>
-                          </span>
-                        );
-                      })}
-                    </div>
-                  )}
-                </>
-              );
-            })()}
+          <div className="combat-log" ref={logRef}>
+            <h4>Journal</h4>
+            {log.length === 0 ? (
+              <div className="log-entry" style={{ color: 'var(--text-muted)' }}>Combat commence...</div>
+            ) : (
+              log.map((entry) => {
+                let entryClass = 'log-entry';
+                switch (entry.type) {
+                  case 'ACTION':
+                    entryClass += entry.message.includes('récupère') ? ' log-heal' : ' log-damage';
+                    break;
+                  case 'MORT': entryClass += ' log-death'; break;
+                  case 'TOUR':
+                  case 'DEPLACEMENT': entryClass += ' log-turn'; break;
+                  case 'EFFET': entryClass += ' log-effect'; break;
+                  case 'EFFET_EXPIRE': entryClass += ' log-effect-expire'; break;
+                  case 'FIN': entryClass += ' log-death'; break;
+                }
+                return <div key={entry.id} className={entryClass}>{entry.message}</div>;
+              })
+            )}
           </div>
-
         </div>
       </div>
 
@@ -1051,18 +988,6 @@ const CombatPage: React.FC = () => {
                 {' | '}
                 <span style={{ color: 'var(--success)' }}>{currentEntity?.pmActuels ?? 0} PM</span>
               </div>
-              {(moveMode || selectedSort || weaponMode) && (
-                <div className="mode-indicator" style={{
-                  background: moveMode ? 'rgba(76,175,80,0.2)' : 'rgba(233,69,96,0.15)',
-                  color: moveMode ? 'var(--success)' : 'var(--primary)',
-                }}>
-                  {moveMode
-                    ? 'Déplacement'
-                    : weaponMode
-                      ? `⚔️ ${armeData?.nom}`
-                      : `${getSpellEmoji(selectedSort!)} ${selectedSort?.nom}`}
-                </div>
-              )}
             </>
           )}
           <button
@@ -1099,28 +1024,71 @@ const CombatPage: React.FC = () => {
         </div>
         </div>{/* fin spell-bar-group */}
 
-        {/* Combat log — en bas à droite (50% de la barre) */}
-        <div className="combat-log" ref={logRef}>
-          <h4>Journal</h4>
-          {log.length === 0 ? (
-            <div className="log-entry" style={{ color: 'var(--text-muted)' }}>Combat commence...</div>
-          ) : (
-            log.map((entry) => {
-              let entryClass = 'log-entry';
-              switch (entry.type) {
-                case 'ACTION':
-                  entryClass += entry.message.includes('récupère') ? ' log-heal' : ' log-damage';
-                  break;
-                case 'MORT': entryClass += ' log-death'; break;
-                case 'TOUR':
-                case 'DEPLACEMENT': entryClass += ' log-turn'; break;
-                case 'EFFET': entryClass += ' log-effect'; break;
-                case 'EFFET_EXPIRE': entryClass += ' log-effect-expire'; break;
-                case 'FIN': entryClass += ' log-death'; break;
-              }
-              return <div key={entry.id} className={entryClass}>{entry.message}</div>;
-            })
-          )}
+        {/* Entity panel compact — en bas à droite (50% de la barre), 3 colonnes */}
+        <div className="entity-panel-compact">
+          {(() => {
+            const ent = selectedEntity || currentEntity;
+            if (!ent) return <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>Cliquez sur une entité</span>;
+            const allEffets = combat.effetsActifs || [];
+            const resistRows = RESIST_STATS
+              .map(([label, stat]) => [label, calcEffectiveResistance(ent.id, ent, stat, allEffets)] as [string, number])
+              .filter(([, v]) => v !== 0);
+            const effects = getEntityEffects(ent.id);
+            return (
+              <div className="epc-columns">
+                {/* Colonne 1 : nom + barres */}
+                <div className="epc-col epc-col-bars">
+                  <div className="epc-name">{ent.nom}</div>
+                  <div className="epc-bar-row">
+                    <span className="epc-label">PV</span>
+                    <div className="epc-bar"><div className="epc-bar-fill hp" style={{ width: `${(ent.pvActuels / ent.pvMax) * 100}%` }} /></div>
+                    <span className="epc-val">{ent.pvActuels}/{ent.pvMax}</span>
+                  </div>
+                  <div className="epc-bar-row">
+                    <span className="epc-label">PA</span>
+                    <div className="epc-bar"><div className="epc-bar-fill pa" style={{ width: `${(ent.paActuels / ent.paMax) * 100}%` }} /></div>
+                    <span className="epc-val">{ent.paActuels}/{ent.paMax}</span>
+                  </div>
+                  <div className="epc-bar-row">
+                    <span className="epc-label">PM</span>
+                    <div className="epc-bar"><div className="epc-bar-fill pm" style={{ width: `${(ent.pmActuels / ent.pmMax) * 100}%` }} /></div>
+                    <span className="epc-val">{ent.pmActuels}/{ent.pmMax}</span>
+                  </div>
+                  {effects.length > 0 && (
+                    <div className="epc-effects">
+                      {effects.map(ef => (
+                        <span key={ef.id} className={`effect-tag ${ef.type?.toLowerCase() || ''}`}>
+                          {ef.nom} ({ef.toursRestants}t)
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {/* Colonne 2 : stats */}
+                <div className="epc-col epc-col-stats">
+                  <div className="epc-col-title">Stats</div>
+                  <div className="epc-stat-row"><span>FOR</span><span>{ent.stats.force}</span></div>
+                  <div className="epc-stat-row"><span>INT</span><span>{ent.stats.intelligence}</span></div>
+                  <div className="epc-stat-row"><span>DEX</span><span>{ent.stats.dexterite}</span></div>
+                  <div className="epc-stat-row"><span>AGI</span><span>{ent.stats.agilite}</span></div>
+                  <div className="epc-stat-row"><span>CHA</span><span>{ent.stats.chance}</span></div>
+                </div>
+                {/* Colonne 3 : résistances */}
+                <div className="epc-col epc-col-resist">
+                  <div className="epc-col-title">Résistances</div>
+                  {resistRows.length === 0
+                    ? <span style={{ color: 'var(--text-muted)', fontSize: 10 }}>—</span>
+                    : resistRows.map(([label, val]) => (
+                      <div key={label} className="epc-stat-row">
+                        <span>r{label}</span>
+                        <span style={{ color: val > 0 ? 'var(--success)' : 'var(--danger)' }}>{val > 0 ? '+' : ''}{val}%</span>
+                      </div>
+                    ))
+                  }
+                </div>
+              </div>
+            );
+          })()}
         </div>
       </div>
     </div>

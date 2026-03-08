@@ -5,6 +5,7 @@ export type SlotType = 'ARME' | 'COIFFE' | 'AMULETTE' | 'BOUCLIER' | 'HAUT' | 'B
 export type EffetType = 'BUFF' | 'DEBUFF' | 'DISPEL' | 'POUSSEE' | 'ATTIRANCE' | 'POISON' | 'BOUCLIER' | 'RESISTANCE';
 export type ZoneType = 'CASE' | 'CROIX' | 'LIGNE' | 'CONE' | 'CERCLE' | 'LIGNE_PERPENDICULAIRE' | 'DIAGONALE' | 'CARRE' | 'ANNEAU' | 'CONE_INVERSE';
 export type CombatStatus = 'EN_COURS' | 'TERMINE' | 'ABANDONNE';
+export type DialogueType = 'ACCUEIL' | 'SANS_INTERACTION';
 export type RegionType = 'FORET' | 'PLAINE' | 'DESERT' | 'MONTAGNE' | 'MARAIS' | 'CAVERNE' | 'CITE';
 export type MapType = 'WILDERNESS' | 'VILLE' | 'DONJON' | 'BOSS' | 'SAFE';
 export type CombatMode = 'MANUEL' | 'AUTO';
@@ -342,7 +343,11 @@ export interface Character {
   chance: number;
   joueurId: number;
   raceId: number;
+  mapId: number | null;
+  positionX: number;
+  positionY: number;
   race?: Race;
+  map?: GameMap | null;
   equipements: Record<string, number | null>;
   sortsAppris?: { sortId: number; sort?: Sort }[];
   totalStats?: TotalStats;
@@ -351,11 +356,9 @@ export interface Character {
 export interface Group {
   id: number;
   nom: string;
-  positionX: number;
-  positionY: number;
-  mapId: number | null;
-  map?: GameMap | null;
   joueurId: number;
+  leaderId: number | null;
+  leader?: Character & { map?: GameMap | null };
   personnages?: { personnage: Character }[];
 }
 
@@ -448,6 +451,7 @@ export interface CombatState {
   tourActuel: number;
   entiteActuelle: number;
   groupeId: number | null;
+  personnageId: number | null;
   grille: { largeur: number; hauteur: number };
   entites: CombatEntity[];
   cases: CombatCase[];
@@ -616,6 +620,22 @@ export interface InventoryState {
   setBonuses?: SetBonusInfo[];
 }
 
+export interface PNJDialogue {
+  id: number;
+  pnjId: number;
+  type: DialogueType;
+  texte: string;
+  ordre: number;
+  queteId?: number | null;
+  etapeOrdre?: number | null;
+}
+
+export interface PnjStatusEntry {
+  pnjId: number;
+  hasAvailable: boolean;
+  hasPending: boolean;
+}
+
 export interface MarchandLigne {
   id: number;
   pnjId: number;
@@ -637,6 +657,7 @@ export interface PNJ {
   positionY: number;
   estMarchand: boolean;
   lignes: MarchandLigne[];
+  dialogues?: PNJDialogue[];
   quetesDepart?: { id: number; nom: string; niveauRequis: number }[];
 }
 
@@ -700,6 +721,8 @@ export interface InteractResponse {
   quetesDisponibles: Quete[];
   etapesEnAttente: QuetePersonnage[];
   estMarchand: boolean;
+  dialogues?: PNJDialogue[];
+  dialogueTexte?: string | null;
 }
 
 export interface AdvanceQuestResponse {

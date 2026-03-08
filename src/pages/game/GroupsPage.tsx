@@ -65,6 +65,8 @@ const GroupsPage: React.FC<GroupsPageProps> = ({ playerId }) => {
     { name: 'joueurId', label: 'Joueur', type: 'select', required: true,
       options: players.map(p => ({ value: p.id, label: p.nom })),
       ...(playerId ? { defaultValue: playerId } : {}) },
+    { name: 'leaderId', label: 'Personnage leader (doit etre sur une map)', type: 'select', required: true,
+      options: allChars.map(c => ({ value: c.id, label: `${c.nom} (Niv.${c.niveau})${c.mapId ? ` - ${c.map?.nom ?? 'Map #' + c.mapId}` : ' - Hors map'}` })) },
   ];
 
   if (loading) return <div className="loading">Chargement...</div>;
@@ -80,8 +82,11 @@ const GroupsPage: React.FC<GroupsPageProps> = ({ playerId }) => {
   }
 
   const groupChars = selected?.personnages?.map(p => p.personnage) || [];
-  // Exclude chars already in ANY group (not just the selected one)
   const availableChars = allChars.filter(c => !charsInGroups.has(c.id));
+  const leaderMapId = selected?.leader?.mapId ?? null;
+  // Split: same map as leader vs autre map
+  const sameMapChars = leaderMapId ? availableChars.filter(c => c.mapId === leaderMapId) : [];
+  const otherMapChars = leaderMapId ? availableChars.filter(c => c.mapId !== leaderMapId) : availableChars;
 
   return (
     <div>
@@ -96,7 +101,7 @@ const GroupsPage: React.FC<GroupsPageProps> = ({ playerId }) => {
             <h4>{g.nom}</h4>
             <div className="meta">
               {g.personnages?.length || 0} persos |
-              Map: {g.mapId ?? 'Aucune'}
+              Map: {g.leader?.map?.nom ?? 'Aucune'}
             </div>
           </div>
         ))}
@@ -110,7 +115,7 @@ const GroupsPage: React.FC<GroupsPageProps> = ({ playerId }) => {
               Partir a l'aventure
             </button>
           </div>
-          <p className="meta">Map: {selected.map?.nom ?? 'Aucune'} | Position: ({selected.positionX}, {selected.positionY})</p>
+          <p className="meta">Map: {selected.leader?.map?.nom ?? 'Aucune'} | Position: ({selected.leader?.positionX ?? 0}, {selected.leader?.positionY ?? 0})</p>
 
           {/* Members */}
           <h3 style={{ marginTop: 16 }}>Membres ({groupChars.length}/6)</h3>
@@ -118,22 +123,44 @@ const GroupsPage: React.FC<GroupsPageProps> = ({ playerId }) => {
             {groupChars.map(c => (
               <div key={c.id} className="card">
                 <h4>{c.nom} <span className="meta">Niv. {c.niveau}</span></h4>
+                <p className="meta" style={{ marginTop: 2 }}>Map: {c.mapId ? `#${c.mapId} (${c.positionX},${c.positionY})` : 'Hors map'}</p>
                 <button className="btn btn-sm btn-danger" onClick={() => removeChar(c.id)}>Retirer</button>
               </div>
             ))}
           </div>
 
-          {/* Add character */}
-          {groupChars.length < 6 && availableChars.length > 0 && (
-            <div style={{ marginTop: 12 }}>
+          {/* Add character — same map first */}
+          {groupChars.length < 6 && (
+            <div style={{ marginTop: 16 }}>
               <h4>Ajouter un personnage</h4>
-              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4 }}>
-                {availableChars.map(c => (
-                  <button key={c.id} className="btn btn-sm btn-secondary" onClick={() => addChar(c.id)}>
-                    {c.nom} (Niv.{c.niveau})
-                  </button>
-                ))}
-              </div>
+              {sameMapChars.length > 0 ? (
+                <>
+                  <p className="meta" style={{ marginBottom: 6 }}>Sur la même map ({selected.leader?.map?.nom ?? `Map #${leaderMapId}`}) :</p>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                    {sameMapChars.map(c => (
+                      <button key={c.id} className="btn btn-sm btn-success" onClick={() => addChar(c.id)}>
+                        + {c.nom} (Niv.{c.niveau})
+                      </button>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <p className="meta" style={{ marginBottom: 6, color: 'var(--warning)' }}>
+                  Aucun personnage disponible sur cette map. Les autres personnages doivent rejoindre la même map via "Partir à l'aventure".
+                </p>
+              )}
+              {otherMapChars.length > 0 && (
+                <>
+                  <p className="meta" style={{ marginBottom: 4, color: 'var(--text-muted)' }}>Autres personnages (map différente, non ajoutables) :</p>
+                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                    {otherMapChars.map(c => (
+                      <span key={c.id} style={{ padding: '2px 8px', borderRadius: 4, background: 'var(--card-bg)', border: '1px solid var(--border)', fontSize: 12, color: 'var(--text-muted)' }}>
+                        {c.nom} ({c.mapId ? `Map #${c.mapId}` : 'Hors map'})
+                      </span>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -141,7 +168,7 @@ const GroupsPage: React.FC<GroupsPageProps> = ({ playerId }) => {
 
       <FormModal open={showCreate} title="Creer un groupe" fields={createFields}
         onSubmit={async (vals) => {
-          await groupsApi.create(vals as { nom: string; joueurId: number });
+          await groupsApi.create(vals as { nom: string; joueurId: number; leaderId: number });
           setShowCreate(false);
           refresh();
         }}

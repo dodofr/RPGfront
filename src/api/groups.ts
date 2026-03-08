@@ -4,7 +4,7 @@ import type { Group, Direction } from '../types';
 export const groupsApi = {
   getAll: () => api.get<Group[]>('/groups').then(r => r.data),
   getById: (id: number) => api.get<Group>(`/groups/${id}`).then(r => r.data),
-  create: (data: { nom: string; joueurId: number }) =>
+  create: (data: { nom: string; joueurId: number; leaderId: number }) =>
     api.post<Group>('/groups', data).then(r => r.data),
   remove: (id: number) => api.delete(`/groups/${id}`),
   addCharacter: (groupeId: number, characterId: number) =>

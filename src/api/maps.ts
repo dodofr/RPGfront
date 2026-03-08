@@ -25,7 +25,7 @@ export const mapsApi = {
   removeConnection: (mapId: number, connId: number) =>
     api.delete(`/maps/${mapId}/connections/${connId}`),
   spawnEnemies: (mapId: number) => api.post(`/maps/${mapId}/spawn-enemies`).then(r => r.data),
-  engage: (mapId: number, data: { groupeId: number; groupeEnnemiId: number }) =>
+  engage: (mapId: number, data: { groupeEnnemiId: number; groupeId?: number; personnageId?: number }) =>
     api.post(`/maps/${mapId}/engage`, data).then(r => r.data),
   respawn: (mapId: number) => api.post(`/maps/${mapId}/respawn`).then(r => r.data),
   getGrid: (mapId: number) => api.get<{ cases: MapCase[]; spawns: MapSpawn[] }>(`/maps/${mapId}/grid`).then(r => r.data),

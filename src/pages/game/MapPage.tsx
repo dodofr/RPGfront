@@ -1,14 +1,13 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { groupsApi } from '../../api/groups';
 import { mapsApi } from '../../api/maps';
 import { pnjApi } from '../../api/pnj';
 import { charactersApi } from '../../api/characters';
+import { playersApi } from '../../api/players';
 import { queteApi } from '../../api/quetes';
-import type { Group, GameMap, Direction, MapConnection, GroupeEnnemi, MapCase, PNJ, Character, InventoryState, InteractResponse, QuetePersonnage, AdvanceQuestResponse } from '../../types';
+import type { Group, GameMap, Direction, MapConnection, MapCase, PNJ, Character, InventoryState, InteractResponse, AdvanceQuestResponse, PnjStatusEntry } from '../../types';
 import '../../styles/index.css';
-
-const CELL_SIZE = 40;
 
 // Build world grid layout from directional links using BFS
 function buildWorldGrid(maps: GameMap[]): { grid: Map<string, GameMap>; minX: number; minY: number; maxX: number; maxY: number } {
@@ -19,7 +18,6 @@ function buildWorldGrid(maps: GameMap[]): { grid: Map<string, GameMap>; minX: nu
   const posById = new Map<number, { x: number; y: number }>();
   const visited = new Set<number>();
 
-  // BFS from first map
   const queue: Array<{ id: number; x: number; y: number }> = [{ id: maps[0].id, x: 0, y: 0 }];
   visited.add(maps[0].id);
   posById.set(maps[0].id, { x: 0, y: 0 });
@@ -48,7 +46,6 @@ function buildWorldGrid(maps: GameMap[]): { grid: Map<string, GameMap>; minX: nu
     }
   }
 
-  // Handle disconnected maps (no directional links)
   let nextY = 100;
   for (const map of maps) {
     if (!visited.has(map.id)) {
@@ -78,12 +75,21 @@ const TYPE_COLORS: Record<string, string> = {
   SAFE: '#00838f',
 };
 
+const GROUP_ADJ = ['Braves', 'Courageux', 'Intrépides', 'Valeureux', 'Téméraires', 'Redoutables', 'Illustres', 'Furtifs', 'Féroces', 'Légendaires'];
+const GROUP_NOUN = ['Aventuriers', 'Compagnons', 'Explorateurs', 'Guerriers', 'Chasseurs', 'Voyageurs', 'Pèlerins', 'Mercenaires', 'Sentinelles', 'Croisés'];
+const randomGroupName = () => `Les ${GROUP_ADJ[Math.floor(Math.random() * GROUP_ADJ.length)]} ${GROUP_NOUN[Math.floor(Math.random() * GROUP_NOUN.length)]}`;
+
 const MapPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const groupIdParam = searchParams.get('groupId');
+  const charIdParam = searchParams.get('charId');
   const navigate = useNavigate();
 
+  const isSoloMode = !!charIdParam && !groupIdParam;
+
   const [group, setGroup] = useState<Group | null>(null);
+  const [character, setCharacter] = useState<Character | null>(null);
+  const [alliedChars, setAlliedChars] = useState<Character[]>([]);
   const [mapData, setMapData] = useState<GameMap | null>(null);
   const [mapCases, setMapCases] = useState<MapCase[]>([]);
   const [allMaps, setAllMaps] = useState<GameMap[]>([]);
@@ -92,10 +98,13 @@ const MapPage: React.FC = () => {
   const [moving, setMoving] = useState(false);
   const [showWorldMap, setShowWorldMap] = useState(false);
 
+  // Grid scaling (same approach as CombatPage)
+  const [gridPixelSize, setGridPixelSize] = useState<{ w: number; h: number } | null>(null);
+  const gridContainerRef = useRef<HTMLDivElement>(null);
+  const [selectedCell, setSelectedCell] = useState<{ x: number; y: number } | null>(null);
+
   // Dungeon portal modal state
-  const [dungeonModal, setDungeonModal] = useState<{
-    connection: MapConnection;
-  } | null>(null);
+  const [dungeonModal, setDungeonModal] = useState<{ connection: MapConnection } | null>(null);
   const [selectedDifficulty, setSelectedDifficulty] = useState<number>(4);
 
   // Network portal modal state
@@ -104,39 +113,140 @@ const MapPage: React.FC = () => {
 
   // PNJ state
   const [mapPNJs, setMapPNJs] = useState<PNJ[]>([]);
-  const [merchantModal, setMerchantModal] = useState<PNJ | null>(null);
+  const [pnjStatus, setPnjStatus] = useState<Map<number, PnjStatusEntry>>(new Map());
+
+  // Unified PNJ modal
+  const [pnjModal, setPnjModal] = useState<{
+    pnj: PNJ;
+    interactData: InteractResponse;
+    personnageId: number;
+    chars: Character[];
+    activeTab: 'dialogue' | 'boutique';
+  } | null>(null);
+  const [pnjFeedback, setPnjFeedback] = useState<string | null>(null);
+  const [pnjRecompenses, setPnjRecompenses] = useState<AdvanceQuestResponse['recompenses'] | null>(null);
   const [merchantTab, setMerchantTab] = useState<'buy' | 'sell'>('buy');
   const [merchantPersonnageId, setMerchantPersonnageId] = useState<number | null>(null);
   const [merchantFeedback, setMerchantFeedback] = useState<Record<string, { ok: boolean; msg: string }>>({});
-  const [merchantChars, setMerchantChars] = useState<Character[]>([]);
   const [merchantInventory, setMerchantInventory] = useState<InventoryState | null>(null);
 
-  // Dialogue modal (quêtes PNJ)
-  const [dialogueModal, setDialogueModal] = useState<{ pnj: PNJ; interactData: InteractResponse; personnageId: number; chars: Character[] } | null>(null);
-  const [dialogueFeedback, setDialogueFeedback] = useState<string | null>(null);
-  const [dialogueRecompenses, setDialogueRecompenses] = useState<AdvanceQuestResponse['recompenses'] | null>(null);
+  // Current actor position (abstracted over group/solo)
+  const posX: number = isSoloMode ? (character?.positionX ?? 0) : (group?.leader?.positionX ?? 0);
+  const posY: number = isSoloMode ? (character?.positionY ?? 0) : (group?.leader?.positionY ?? 0);
+  const actorName: string = isSoloMode ? (character?.nom ?? 'Aventurier') : (group?.nom ?? 'Groupe');
 
-  // Enemy group modal state (click on enemy cell → confirm before engaging)
-  const [enemyModal, setEnemyModal] = useState<{ group: GroupeEnnemi } | null>(null);
+  // Dynamic grid size via ResizeObserver (same approach as CombatPage)
+  useLayoutEffect(() => {
+    const container = gridContainerRef.current;
+    if (!container || !mapData) return;
+    const W = mapData.largeur;
+    const H = mapData.hauteur;
+    const computeSize = (innerW: number, innerH: number) => {
+      if (innerW <= 0 || innerH <= 0) return;
+      const byWidth = innerW * H / W;
+      const w = byWidth <= innerH ? innerW : innerH * W / H;
+      const h = byWidth <= innerH ? byWidth : innerH;
+      setGridPixelSize(prev => {
+        if (prev && Math.abs(prev.w - w) < 1 && Math.abs(prev.h - h) < 1) return prev;
+        return { w: Math.floor(w), h: Math.floor(h) };
+      });
+    };
+    const rect = container.getBoundingClientRect();
+    computeSize(rect.width - 16, rect.height - 16);
+    const ro = new ResizeObserver(entries => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        computeSize(width, height);
+      }
+    });
+    ro.observe(container);
+    return () => ro.disconnect();
+  }, [mapData?.largeur, mapData?.hauteur]);
 
   const loadGroup = useCallback(async (gId: number) => {
-    const g = await groupsApi.getById(gId);
+    let g: Group | null = null;
+    try {
+      g = await groupsApi.getById(gId);
+    } catch {
+      navigate('/game/dashboard', { replace: true });
+      return;
+    }
     setGroup(g);
-    if (g.mapId) {
-      const [map, grid, pnjs] = await Promise.all([
-        mapsApi.getById(g.mapId),
-        mapsApi.getGrid(g.mapId),
-        pnjApi.getByMap(g.mapId),
+    const mapId = g.leader?.mapId;
+    if (mapId) {
+      const [map, grid, pnjs, playerChars] = await Promise.all([
+        mapsApi.getById(mapId),
+        mapsApi.getGrid(mapId),
+        pnjApi.getByMap(mapId),
+        playersApi.getCharacters(g.joueurId),
       ]);
       setMapData(map);
       setMapCases(grid.cases ?? []);
       setMapPNJs(pnjs);
+      const memberIds = new Set(g.personnages?.map((gp: any) => gp.personnage.id) ?? []);
+      setAlliedChars(
+        playerChars.filter((c: Character) => c.mapId === mapId && !memberIds.has(c.id))
+      );
+      const ids = g.personnages?.map((gp: any) => gp.personnage.id) ?? [];
+      if (pnjs.length > 0 && ids.length > 0) {
+        const statuses = await pnjApi.getMapStatus(mapId, ids);
+        setPnjStatus(new Map(statuses.map(s => [s.pnjId, s])));
+      } else {
+        setPnjStatus(new Map());
+      }
     } else {
       setMapData(null);
       setMapCases([]);
       setMapPNJs([]);
+      setAlliedChars([]);
+      setPnjStatus(new Map());
     }
-  }, []);
+  }, [navigate]);
+
+  const loadCharacter = useCallback(async (cId: number) => {
+    const c = await charactersApi.getById(cId);
+    const allGroups = await groupsApi.getAll();
+    const existingGroup = allGroups.find((g: Group) =>
+      g.personnages?.some((gp: any) => gp.personnage.id === cId)
+    );
+    if (existingGroup) {
+      navigate(`/game/adventure?groupId=${existingGroup.id}`, { replace: true });
+      return;
+    }
+    setCharacter(c);
+    if (c.mapId) {
+      const [map, grid, pnjs, playerChars] = await Promise.all([
+        mapsApi.getById(c.mapId),
+        mapsApi.getGrid(c.mapId),
+        pnjApi.getByMap(c.mapId),
+        playersApi.getCharacters(c.joueurId),
+      ]);
+      setMapData(map);
+      setMapCases(grid.cases ?? []);
+      setMapPNJs(pnjs);
+      setAlliedChars(playerChars.filter((p: Character) => p.id !== cId && p.mapId === c.mapId));
+      if (pnjs.length > 0) {
+        const statuses = await pnjApi.getMapStatus(c.mapId, [cId]);
+        setPnjStatus(new Map(statuses.map(s => [s.pnjId, s])));
+      } else {
+        setPnjStatus(new Map());
+      }
+    } else {
+      setMapData(null);
+      setMapCases([]);
+      setMapPNJs([]);
+      setAlliedChars([]);
+      setPnjStatus(new Map());
+    }
+  }, [navigate]);
+
+  const reload = useCallback(async () => {
+    if (isSoloMode && charIdParam) {
+      await loadCharacter(Number(charIdParam));
+    } else if (groupIdParam) {
+      await loadGroup(Number(groupIdParam));
+    }
+  }, [isSoloMode, charIdParam, groupIdParam, loadCharacter, loadGroup]);
 
   useEffect(() => {
     const init = async () => {
@@ -149,16 +259,16 @@ const MapPage: React.FC = () => {
       setAllPortals(portals);
       if (groupIdParam) {
         await loadGroup(Number(groupIdParam));
+      } else if (charIdParam) {
+        await loadCharacter(Number(charIdParam));
       }
       setLoading(false);
     };
     init();
-  }, [groupIdParam, loadGroup]);
+  }, [groupIdParam, charIdParam, loadGroup, loadCharacter]);
 
-  // Build world grid for mini-map
   const worldGrid = useMemo(() => buildWorldGrid(allMaps), [allMaps]);
 
-  // Build connection position lookup
   const connectionAt = useMemo(() => {
     const map = new Map<string, MapConnection>();
     if (mapData?.connectionsFrom) {
@@ -169,7 +279,6 @@ const MapPage: React.FC = () => {
     return map;
   }, [mapData]);
 
-  // Lookup O(1) pour les cases bloquées (obstacles + zones exclues)
   const blockedAt = useMemo(() => {
     const set = new Set<string>();
     for (const c of mapCases) {
@@ -178,7 +287,6 @@ const MapPage: React.FC = () => {
     return set;
   }, [mapCases]);
 
-  // Lookup O(1) pour les cases qui bloquent aussi la ligne de vue
   const losBlockedAt = useMemo(() => {
     const set = new Set<string>();
     for (const c of mapCases) {
@@ -187,7 +295,6 @@ const MapPage: React.FC = () => {
     return set;
   }, [mapCases]);
 
-  // PNJ lookup by position
   const pnjAt = useMemo(() => {
     const map = new Map<string, PNJ>();
     for (const p of mapPNJs) {
@@ -196,24 +303,37 @@ const MapPage: React.FC = () => {
     return map;
   }, [mapPNJs]);
 
-  const handleCellClick = async (x: number, y: number) => {
-    if (!group || !mapData || moving) return;
+  const alliedAt = useMemo(() => {
+    const map = new Map<string, Character>();
+    for (const a of alliedChars) {
+      map.set(`${a.positionX},${a.positionY}`, a);
+    }
+    return map;
+  }, [alliedChars]);
 
-    // Check if clicking on a connection
+  const handleCellClick = async (x: number, y: number) => {
+    if ((!group && !character) || !mapData || moving) return;
+
     const conn = connectionAt.get(`${x},${y}`);
-    if (conn && x === group.positionX && y === group.positionY) {
-      // Player is on the connection cell - use it
+    if (conn && x === posX && y === posY) {
       if (conn.donjonId && conn.donjon) {
-        // Dungeon portal: show difficulty modal
         setDungeonModal({ connection: conn });
         return;
       }
-      // Network portal: show destination selection modal
       setPortalModal({ connection: conn });
       return;
     }
 
-    // Edge clicks for map transitions
+    const clickedPnj = pnjAt.get(`${x},${y}`);
+    if (clickedPnj) {
+      const chars: Character[] = isSoloMode
+        ? (character ? [character] : [])
+        : ((group?.personnages ?? []).map((gp: any) => gp.personnage).filter(Boolean) as Character[]);
+      const firstCharId = chars[0]?.id ?? null;
+      if (firstCharId) await openPnjModal(clickedPnj, firstCharId, chars);
+      return;
+    }
+
     const isNord = y === 0 && mapData.nordMapId;
     const isSud = y === mapData.hauteur - 1 && mapData.sudMapId;
     const isOuest = x === 0 && mapData.ouestMapId;
@@ -228,12 +348,17 @@ const MapPage: React.FC = () => {
 
       setMoving(true);
       try {
-        const result = await groupsApi.moveDirection(group.id, dir);
-        if (result.combat) {
+        let result;
+        if (isSoloMode && character) {
+          result = await charactersApi.navMoveDirection(character.id, dir);
+        } else if (group) {
+          result = await groupsApi.moveDirection(group.id, dir);
+        }
+        if (result?.combat) {
           navigate(`/game/combat/${result.combat.id}`);
           return;
         }
-        await loadGroup(group.id);
+        await reload();
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message :
           (err as any)?.response?.data?.error || 'Erreur';
@@ -243,17 +368,21 @@ const MapPage: React.FC = () => {
       return;
     }
 
-    // Normal move
-    if (x === group.positionX && y === group.positionY) return;
+    if (x === posX && y === posY) return;
 
     setMoving(true);
     try {
-      const result = await groupsApi.move(group.id, x, y);
-      if (result.combat) {
+      let result;
+      if (isSoloMode && character) {
+        result = await charactersApi.navMove(character.id, x, y);
+      } else if (group) {
+        result = await groupsApi.move(group.id, x, y);
+      }
+      if (result?.combat) {
         navigate(`/game/combat/${result.combat.id}`);
         return;
       }
-      await loadGroup(group.id);
+      await reload();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message :
         (err as any)?.response?.data?.error || 'Erreur';
@@ -263,13 +392,16 @@ const MapPage: React.FC = () => {
   };
 
   const handleEnterDungeon = async () => {
-    if (!group || !dungeonModal) return;
+    if (!dungeonModal) return;
     setMoving(true);
     setDungeonModal(null);
     try {
-      await groupsApi.useConnection(group.id, dungeonModal.connection.id, selectedDifficulty);
-      // Dungeon entered - reload group (now on dungeon room map)
-      await loadGroup(group.id);
+      if (isSoloMode && character) {
+        await charactersApi.navUseConnection(character.id, dungeonModal.connection.id, undefined, selectedDifficulty);
+      } else if (group) {
+        await groupsApi.useConnection(group.id, dungeonModal.connection.id, selectedDifficulty);
+      }
+      await reload();
     } catch (err: unknown) {
       const msg = (err as any)?.response?.data?.error || (err instanceof Error ? err.message : 'Erreur');
       alert(msg);
@@ -278,15 +410,20 @@ const MapPage: React.FC = () => {
   };
 
   const handleEnterMap = async () => {
-    if (!group || !enterMapId) return;
+    if (!enterMapId) return;
     setMoving(true);
     try {
-      const result = await groupsApi.enterMap(group.id, enterMapId);
-      if (result.combat) {
+      let result;
+      if (isSoloMode && character) {
+        result = await charactersApi.navEnterMap(character.id, enterMapId);
+      } else if (group) {
+        result = await groupsApi.enterMap(group.id, enterMapId);
+      }
+      if (result?.combat) {
         navigate(`/game/combat/${result.combat.id}`);
         return;
       }
-      await loadGroup(group.id);
+      await reload();
     } catch (err: unknown) {
       const msg = (err as any)?.response?.data?.error || (err instanceof Error ? err.message : 'Erreur');
       alert(msg);
@@ -295,23 +432,46 @@ const MapPage: React.FC = () => {
   };
 
   const handleLeaveMap = async () => {
-    if (!group) return;
     try {
-      await groupsApi.leaveMap(group.id);
-      await loadGroup(group.id);
+      if (isSoloMode && character) {
+        await charactersApi.navLeaveMap(character.id);
+      } else if (group) {
+        await groupsApi.leaveMap(group.id);
+      }
+      await reload();
     } catch (err: unknown) {
       const msg = (err as any)?.response?.data?.error || (err instanceof Error ? err.message : 'Erreur');
       alert(msg);
     }
   };
 
-  const handleEngage = async (groupeEnnemiId: number) => {
-    if (!group || !mapData) return;
+  const handleUsePortal = async (conn: MapConnection, destinationConnectionId: number) => {
+    setPortalModal(null);
+    setMoving(true);
     try {
-      const result = await mapsApi.engage(mapData.id, {
-        groupeId: group.id,
-        groupeEnnemiId,
-      });
+      if (isSoloMode && character) {
+        await charactersApi.navUseConnection(character.id, conn.id, destinationConnectionId);
+      } else if (group) {
+        await groupsApi.useConnection(group.id, conn.id, undefined, destinationConnectionId);
+      }
+      await reload();
+    } catch (err: unknown) {
+      const msg = (err as any)?.response?.data?.error || (err instanceof Error ? err.message : 'Erreur');
+      alert(msg);
+    }
+    setMoving(false);
+  };
+
+  const handleEngage = async (groupeEnnemiId: number) => {
+    if (!mapData) return;
+    try {
+      const engageBody: { groupeEnnemiId: number; groupeId?: number; personnageId?: number } = { groupeEnnemiId };
+      if (isSoloMode && character) {
+        engageBody.personnageId = character.id;
+      } else if (group) {
+        engageBody.groupeId = group.id;
+      }
+      const result = await mapsApi.engage(mapData.id, engageBody);
       navigate(`/game/combat/${result.id}`);
     } catch (err: unknown) {
       const msg = (err as any)?.response?.data?.error || (err instanceof Error ? err.message : 'Erreur');
@@ -320,35 +480,95 @@ const MapPage: React.FC = () => {
   };
 
   const handleSpawnEnemies = async () => {
-    if (!mapData || !group) return;
+    if (!mapData) return;
     await mapsApi.spawnEnemies(mapData.id);
-    await loadGroup(group.id);
+    await reload();
+  };
+
+  const openPnjModal = async (pnj: PNJ, charId: number, chars: Character[]) => {
+    try {
+      const interactData = await queteApi.interact(pnj.id, charId);
+      const hasQuestContent = interactData.quetesDisponibles?.length > 0 || interactData.etapesEnAttente?.length > 0;
+      const defaultTab: 'dialogue' | 'boutique' = interactData.estMarchand && !hasQuestContent && !interactData.dialogues?.length ? 'boutique' : 'dialogue';
+      setPnjFeedback(null);
+      setPnjRecompenses(null);
+      setMerchantFeedback({});
+      setMerchantInventory(null);
+      if (interactData.estMarchand && chars.length > 0) {
+        setMerchantPersonnageId(chars[0].id);
+        const inv = await charactersApi.getInventory(chars[0].id);
+        setMerchantInventory(inv);
+      }
+      setPnjModal({ pnj, interactData, personnageId: charId, chars, activeTab: defaultTab });
+    } catch (err: unknown) {
+      const msg = (err as any)?.response?.data?.error || (err instanceof Error ? err.message : 'Erreur');
+      alert(msg);
+    }
+  };
+
+  const refreshPnjStatus = async (mapId: number, ids: number[]) => {
+    if (ids.length === 0) return;
+    try {
+      const statuses = await pnjApi.getMapStatus(mapId, ids);
+      setPnjStatus(new Map(statuses.map(s => [s.pnjId, s])));
+    } catch { /* silent */ }
+  };
+
+  const handleRemoveMember = async (charId: number) => {
+    if (!group) return;
+    const isLastMember = (group.personnages?.length ?? 0) <= 1;
+    try {
+      await groupsApi.removeCharacter(group.id, charId);
+      if (isLastMember) {
+        navigate(`/game/adventure?charId=${charId}`, { replace: true });
+      } else {
+        await reload();
+      }
+    } catch (err: unknown) {
+      alert((err as any)?.response?.data?.error || (err instanceof Error ? err.message : 'Erreur'));
+    }
+  };
+
+  const handleInviteMember = async (charId: number) => {
+    if (!group) return;
+    try {
+      const allGroups = await groupsApi.getAll();
+      const existingGroup = allGroups.find((g: Group) =>
+        g.id !== group.id && g.personnages?.some((gp: any) => gp.personnage.id === charId)
+      );
+      if (existingGroup) {
+        await groupsApi.removeCharacter(existingGroup.id, charId);
+      }
+      await groupsApi.addCharacter(group.id, charId);
+      await reload();
+    } catch (err: unknown) {
+      alert((err as any)?.response?.data?.error || (err instanceof Error ? err.message : 'Erreur'));
+    }
   };
 
   if (loading) return <div className="loading">Chargement...</div>;
 
-  if (!group) {
+  if (!group && !character) {
     return (
       <div>
         <div className="page-header">
           <h1>Aventure</h1>
           <button className="btn btn-secondary" onClick={() => navigate('/game/dashboard')}>Retour au camp</button>
         </div>
-        <p className="meta">Aucun groupe selectionne. Retournez au dashboard et choisissez un groupe.</p>
+        <p className="meta">Aucun personnage ou groupe selectionne. Retournez au dashboard.</p>
       </div>
     );
   }
 
-  // Group not on a map - show map selector
   if (!mapData) {
     return (
       <div>
         <div className="page-header">
-          <h1>Aventure - {group.nom}</h1>
+          <h1>Aventure - {actorName}</h1>
           <button className="btn btn-secondary" onClick={() => navigate('/game/dashboard')}>Retour au camp</button>
         </div>
         <div style={{ marginTop: 24 }}>
-          <p>Le groupe n'est sur aucune map. Choisissez une map pour commencer :</p>
+          <p>Choisissez une map pour commencer :</p>
           <div className="inline-form" style={{ marginTop: 12 }}>
             <select
               value={enterMapId ?? ''}
@@ -369,11 +589,11 @@ const MapPage: React.FC = () => {
     );
   }
 
-  // Build entity positions for the grid
   const enemies = (mapData.groupesEnnemis || []).filter(ge => !ge.vaincu);
 
   const getCellType = (x: number, y: number) => {
-    if (x === group.positionX && y === group.positionY) return 'player';
+    if (x === posX && y === posY) return 'player';
+    if (alliedAt.has(`${x},${y}`)) return 'ally';
     for (const ge of enemies) {
       if (ge.positionX === x && ge.positionY === y) return 'enemy';
     }
@@ -393,119 +613,102 @@ const MapPage: React.FC = () => {
     return null;
   };
 
-  // Check if player is on a connection
-  const playerOnConnection = connectionAt.get(`${group.positionX},${group.positionY}`);
+  const playerOnConnection = connectionAt.get(`${posX},${posY}`);
 
-  // Check if player is on an NPC
-  const playerOnNPC = pnjAt.get(`${group.positionX},${group.positionY}`);
-
-  // Mini-map rendering
   const { grid: worldMap, minX, minY, maxX, maxY } = worldGrid;
   const worldW = maxX - minX + 1;
   const worldH = maxY - minY + 1;
 
+  const getGroupChars = (): Character[] =>
+    (group?.personnages ?? []).map((gp: any) => gp.personnage).filter(Boolean) as Character[];
+
   return (
-    <div className="adventure-layout">
-      <div className="adventure-main">
-        <div className="page-header">
-          <h1>{mapData.nom}</h1>
-          <div>
-            <button className="btn btn-secondary" onClick={handleLeaveMap} style={{ marginRight: 8 }}>
-              Quitter la map
+    <div className="adv-page">
+      {/* HEADER */}
+      <div className="adv-header">
+        <span className="adv-breadcrumb">
+          {mapData.region?.nom ? `${mapData.region.nom} › ` : ''}{mapData.nom}
+        </span>
+        <span className="adv-header-meta">
+          {mapData.type} · {mapData.combatMode} · ({posX}, {posY})
+          {moving && ' · Déplacement...'}
+        </span>
+      </div>
+
+      {/* MAIN */}
+      <div className="adv-main">
+        {/* LEFT: member cards */}
+        <div className="adv-left">
+          {isSoloMode && character ? (
+            <div
+              className="adv-member-card"
+              onClick={() => navigate(`/game/characters?playerId=${character.joueurId}&charId=${character.id}`)}
+              title="Voir la fiche"
+            >
+              <div className="adv-member-initial">{character.nom.charAt(0).toUpperCase()}</div>
+              <div className="adv-member-name">{character.nom}</div>
+              <div className="adv-member-level">Niv. {character.niveau}</div>
+              <div className="adv-member-xp">
+                {Math.max(0, (character.niveau + 1) ** 2 * 50 - character.experience)} XP
+              </div>
+            </div>
+          ) : (
+            group?.personnages?.map(({ personnage: p }) => (
+              <div key={p.id} style={{ position: 'relative' }}>
+                <div
+                  className="adv-member-card"
+                  onClick={() => navigate(`/game/characters?playerId=${group.joueurId}&groupId=${groupIdParam}&charId=${p.id}`)}
+                  title={`Voir la fiche de ${p.nom}`}
+                >
+                  <div className="adv-member-initial">{p.nom.charAt(0).toUpperCase()}</div>
+                  <div className="adv-member-name">{p.nom}</div>
+                  <div className="adv-member-level">Niv. {p.niveau}</div>
+                  <div className="adv-member-xp">
+                    {Math.max(0, (p.niveau + 1) ** 2 * 50 - (p.experience ?? 0))} XP
+                  </div>
+                </div>
+                <button
+                  className="btn btn-sm btn-danger"
+                  style={{ position: 'absolute', top: 2, right: 2, padding: '1px 4px', fontSize: 9, lineHeight: 1.2, minWidth: 0 }}
+                  title="Retirer du groupe"
+                  onClick={e => { e.stopPropagation(); handleRemoveMember(p.id); }}
+                >✕</button>
+              </div>
+            ))
+          )}
+
+          {/* Dissolve button at bottom for group mode */}
+          {!isSoloMode && group && (
+            <button
+              className="btn btn-sm btn-danger"
+              style={{ marginTop: 'auto', width: '100%', fontSize: 10, opacity: 0.8 }}
+              onClick={async () => {
+                if (!confirm('Dissoudre le groupe ?')) return;
+                const leaderId = group.leader?.id;
+                try {
+                  await groupsApi.remove(group.id);
+                  if (leaderId) navigate(`/game/adventure?charId=${leaderId}`, { replace: true });
+                  else navigate('/game/dashboard', { replace: true });
+                } catch (err: unknown) {
+                  alert((err as any)?.response?.data?.error || (err instanceof Error ? err.message : 'Erreur'));
+                }
+              }}
+            >
+              Dissoudre
             </button>
-            <button className="btn btn-secondary" onClick={() => navigate('/game/dashboard')}>
-              Retour au camp
-            </button>
-          </div>
+          )}
         </div>
 
-        {/* Connection prompt when player is on a portal */}
-        {playerOnConnection && (
-          <div className="adventure-connection-prompt" style={{
-            padding: '8px 16px',
-            marginBottom: 8,
-            background: playerOnConnection.donjonId ? 'var(--accent-purple, #8e24aa)' : 'var(--accent, #1976d2)',
-            color: 'white',
-            borderRadius: 8,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-          }}>
-            <span>
-              {playerOnConnection.donjonId ? '\u2694\ufe0f' : '\u{1F6AA}'}{' '}
-              <strong>{playerOnConnection.nom}</strong>
-              {playerOnConnection.donjon && (
-                <span style={{ marginLeft: 8, fontSize: 12, opacity: 0.9 }}>
-                  (Niv. {playerOnConnection.donjon.niveauMin}-{playerOnConnection.donjon.niveauMax})
-                </span>
-              )}
-            </span>
-            <button
-              className="btn btn-sm"
-              style={{ background: 'white', color: playerOnConnection.donjonId ? '#8e24aa' : '#1976d2' }}
-              onClick={() => {
-                if (playerOnConnection.donjonId && playerOnConnection.donjon) {
-                  setDungeonModal({ connection: playerOnConnection });
-                } else {
-                  setPortalModal({ connection: playerOnConnection });
-                }
-              }}
-            >
-              {playerOnConnection.donjonId ? 'Entrer dans le donjon' : 'Utiliser le portail'}
-            </button>
-          </div>
-        )}
-
-        {/* NPC prompt when player is on an NPC cell */}
-        {playerOnNPC && (
-          <div style={{
-            padding: '8px 16px', marginBottom: 8, borderRadius: 8,
-            background: '#388e3c', color: 'white',
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          }}>
-            <span>💬 <strong>{playerOnNPC.nom}</strong></span>
-            <button
-              className="btn btn-sm"
-              style={{ background: 'white', color: '#388e3c' }}
-              onClick={async () => {
-                const chars = (group?.personnages ?? []).map((gp: any) => gp.personnage).filter(Boolean) as Character[];
-                const firstCharId = chars[0]?.id ?? null;
-                if (!firstCharId) return;
-                try {
-                  const interactData = await queteApi.interact(playerOnNPC.id, firstCharId);
-                  setDialogueFeedback(null);
-                  setDialogueRecompenses(null);
-                  setDialogueModal({ pnj: playerOnNPC, interactData, personnageId: firstCharId, chars });
-                } catch {
-                  // Fallback: open merchant modal directly
-                  const full = await pnjApi.getById(playerOnNPC.id);
-                  setMerchantModal(full);
-                  setMerchantTab('buy');
-                  setMerchantFeedback({});
-                  setMerchantInventory(null);
-                  const g = await groupsApi.getById(group.id);
-                  const chars2 = g.personnages?.map((gp: any) => gp.personnage).filter(Boolean) ?? [];
-                  setMerchantChars(chars2);
-                  if (chars2.length > 0) {
-                    setMerchantPersonnageId(chars2[0].id);
-                    const inv = await charactersApi.getInventory(chars2[0].id);
-                    setMerchantInventory(inv);
-                  }
-                }
-              }}
-            >
-              Parler à {playerOnNPC.nom}
-            </button>
-          </div>
-        )}
-
-        {/* Visual grid */}
-        <div className="adventure-grid-container">
+        {/* GRID */}
+        <div className="adv-grid-container" ref={gridContainerRef}>
           <div
             className="adventure-grid"
             style={{
-              gridTemplateColumns: `repeat(${mapData.largeur}, ${CELL_SIZE}px)`,
-              gridTemplateRows: `repeat(${mapData.hauteur}, ${CELL_SIZE}px)`,
+              gridTemplateColumns: `repeat(${mapData.largeur}, 1fr)`,
+              gridTemplateRows: `repeat(${mapData.hauteur}, 1fr)`,
+              ...(gridPixelSize
+                ? { width: gridPixelSize.w, height: gridPixelSize.h }
+                : { width: '100%', aspectRatio: `${mapData.largeur} / ${mapData.hauteur}` }),
             }}
           >
             {Array.from({ length: mapData.hauteur }, (_, y) =>
@@ -515,13 +718,15 @@ const MapPage: React.FC = () => {
                 const enemy = cellType === 'enemy' ? getEnemyAt(x, y) : null;
                 const conn = connectionAt.get(`${x},${y}`);
                 const npc = pnjAt.get(`${x},${y}`);
-                const isPlayerHere = x === group.positionX && y === group.positionY;
+                const isPlayerHere = x === posX && y === posY;
+                const allyHere = alliedAt.get(`${x},${y}`);
 
                 const isBlocked = blockedAt.has(`${x},${y}`);
                 const isLosBlocked = losBlockedAt.has(`${x},${y}`);
                 let className = 'adventure-cell';
                 if (isBlocked) className += isLosBlocked ? ' cell-obstacle-los' : ' cell-obstacle';
                 if (isPlayerHere) className += ' cell-player';
+                else if (cellType === 'ally') className += ' cell-ally';
                 else if (cellType === 'enemy') className += ' cell-enemy';
                 else if (cellType === 'connection') className += ' cell-connection';
                 else if (cellType === 'npc') className += ' cell-npc';
@@ -531,16 +736,20 @@ const MapPage: React.FC = () => {
                   <div
                     key={`${x}-${y}`}
                     className={className}
+                    style={{
+                      ...(cellType === 'connection' && !isPlayerHere ? { background: conn?.donjonId ? '#ce93d8' : '#90caf9' } : {}),
+                      ...(cellType === 'npc' && !isPlayerHere ? { background: '#a5d6a7' } : {}),
+                      ...(cellType === 'ally' ? { background: '#1565c0' } : {}),
+                    }}
                     onClick={() => {
-                      if (cellType === 'enemy' && enemy) {
-                        setEnemyModal({ group: enemy });
-                      } else {
+                      setSelectedCell({ x, y });
+                      if (cellType !== 'enemy') {
                         handleCellClick(x, y);
                       }
                     }}
                     title={
                       isPlayerHere
-                        ? (conn ? `${group.nom} - ${conn.nom}` : group.nom)
+                        ? (conn ? `${actorName} - ${conn.nom}` : actorName)
                         : cellType === 'enemy' && enemy
                           ? `Ennemis (${enemy.membres?.map(m => `${m.monstre?.nom} Niv.${m.niveau}`).join(', ')})`
                           : conn
@@ -549,142 +758,233 @@ const MapPage: React.FC = () => {
                               ? `Aller ${edge}`
                               : `(${x}, ${y})`
                     }
-                    style={cellType === 'connection' && !isPlayerHere ? {
-                      background: conn?.donjonId ? '#ce93d8' : '#90caf9',
-                    } : cellType === 'npc' && !isPlayerHere ? {
-                      background: '#a5d6a7',
-                    } : undefined}
                   >
-                    {isPlayerHere && <span className="cell-icon">P</span>}
+                    {isPlayerHere && <span className="cell-icon">{actorName.charAt(0).toUpperCase()}</span>}
+                    {cellType === 'ally' && <span className="cell-icon" title={allyHere?.nom}>{allyHere?.nom.charAt(0).toUpperCase() ?? 'A'}</span>}
                     {cellType === 'enemy' && <span className="cell-icon">E</span>}
                     {cellType === 'connection' && !isPlayerHere && (
-                      <span className="cell-icon" style={{ fontSize: 16 }}>
-                        {conn?.donjonId ? '\u2694' : '\u{1F6AA}'}
-                      </span>
+                      <span className="cell-icon">{conn?.donjonId ? '⚔' : '🚪'}</span>
                     )}
                     {cellType === 'npc' && !isPlayerHere && (
-                      <span className="cell-icon" style={{ fontSize: 14 }} title={npc?.nom}>💬</span>
+                      <span className="cell-icon" style={{ position: 'relative' }} title={npc?.nom}>
+                        💬
+                        {pnjStatus.get(npc!.id)?.hasPending && (
+                          <span style={{ position: 'absolute', top: -4, right: -4, background: '#ff9800', color: '#000', borderRadius: '50%', width: 14, height: 14, fontSize: 9, lineHeight: '14px', textAlign: 'center', fontWeight: 'bold', display: 'block' }}>?</span>
+                        )}
+                        {!pnjStatus.get(npc!.id)?.hasPending && pnjStatus.get(npc!.id)?.hasAvailable && (
+                          <span style={{ position: 'absolute', top: -4, right: -4, background: '#4caf50', color: '#fff', borderRadius: '50%', width: 14, height: 14, fontSize: 9, lineHeight: '14px', textAlign: 'center', fontWeight: 'bold', display: 'block' }}>!</span>
+                        )}
+                      </span>
                     )}
-                    {cellType === 'empty' && edge && <span className="cell-edge-arrow">
-                      {edge === 'NORD' ? '\u2191' : edge === 'SUD' ? '\u2193' : edge === 'OUEST' ? '\u2190' : '\u2192'}
-                    </span>}
+                    {cellType === 'empty' && edge && (
+                      <span className="cell-edge-arrow">
+                        {edge === 'NORD' ? '↑' : edge === 'SUD' ? '↓' : edge === 'OUEST' ? '←' : '→'}
+                      </span>
+                    )}
                   </div>
                 );
               })
             )}
           </div>
         </div>
+
+        {/* RIGHT PANEL */}
+        <div className="adv-right">
+          {/* PNJs */}
+          {mapPNJs.length > 0 && (
+            <div className="adv-panel-section">
+              <h4>PNJs ({mapPNJs.length})</h4>
+              {mapPNJs.map(pnj => {
+                const status = pnjStatus.get(pnj.id);
+                return (
+                  <div key={pnj.id} className="adv-panel-card">
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
+                      <span style={{ fontWeight: 600, fontSize: 11 }}>
+                        💬 {pnj.nom}
+                        {status?.hasPending && <span style={{ marginLeft: 4, color: '#ff9800' }}>?</span>}
+                        {!status?.hasPending && status?.hasAvailable && <span style={{ marginLeft: 4, color: '#4caf50' }}>!</span>}
+                      </span>
+                      <button
+                        className="btn btn-sm btn-secondary"
+                        style={{ fontSize: 10, padding: '2px 6px' }}
+                        onClick={async () => {
+                          const chars = isSoloMode ? (character ? [character] : []) : getGroupChars();
+                          if (chars.length > 0) await openPnjModal(pnj, chars[0].id, chars);
+                        }}
+                      >Parler</button>
+                    </div>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>({pnj.positionX}, {pnj.positionY})</div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Enemies */}
+          {enemies.length > 0 && (
+            <div className="adv-panel-section">
+              <h4>Ennemis ({enemies.length})</h4>
+              {enemies.map(ge => (
+                <div key={ge.id} className="adv-panel-card">
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>({ge.positionX}, {ge.positionY})</div>
+                  <div style={{ fontSize: 11 }}>{ge.membres?.map(m => `${m.monstre?.nom} x${m.quantite} Niv.${m.niveau}`).join(', ')}</div>
+                  <button
+                    className="btn btn-sm btn-danger"
+                    style={{ fontSize: 10, padding: '2px 6px', marginTop: 2 }}
+                    onClick={() => handleEngage(ge.id)}
+                  >Engager</button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Portals */}
+          {mapData.connectionsFrom && mapData.connectionsFrom.length > 0 && (
+            <div className="adv-panel-section">
+              <h4>Portails ({mapData.connectionsFrom.length})</h4>
+              {mapData.connectionsFrom.map(conn => (
+                <div key={conn.id} className="adv-panel-card" style={{ borderLeft: conn.donjonId ? '3px solid #8e24aa' : '3px solid #1976d2' }}>
+                  <div style={{ fontWeight: 600, fontSize: 11 }}>
+                    {conn.donjonId ? '⚔️' : '🚪'} {conn.nom}
+                  </div>
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>({conn.positionX}, {conn.positionY})</div>
+                  {conn.donjon && <div style={{ fontSize: 10, color: '#8e24aa' }}>{conn.donjon.nom} Niv.{conn.donjon.niveauMin}-{conn.donjon.niveauMax}</div>}
+                  {conn.toMap && !conn.donjonId && <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>→ {conn.toMap.nom}</div>}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Allied chars on same map */}
+          {alliedChars.length > 0 && (
+            <div className="adv-panel-section">
+              <h4>Sur cette map</h4>
+              {alliedChars.map(a => (
+                <div key={a.id} className="adv-panel-card" style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: 11 }}>{a.nom} <span style={{ color: 'var(--text-muted)', fontSize: 10 }}>Niv.{a.niveau}</span></span>
+                  {isSoloMode ? (
+                    <button
+                      className="btn btn-sm btn-success"
+                      style={{ fontSize: 10, padding: '2px 6px' }}
+                      onClick={async () => {
+                        if (!character) return;
+                        try {
+                          const grp = await groupsApi.create({
+                            nom: randomGroupName(),
+                            joueurId: character.joueurId,
+                            leaderId: character.id,
+                          });
+                          const allGroups = await groupsApi.getAll();
+                          const existingGroup = allGroups.find((g: Group) =>
+                            g.personnages?.some((gp: any) => gp.personnage.id === a.id)
+                          );
+                          if (existingGroup) await groupsApi.removeCharacter(existingGroup.id, a.id);
+                          await groupsApi.addCharacter(grp.id, a.id);
+                          navigate(`/game/adventure?groupId=${grp.id}`);
+                        } catch (err: unknown) {
+                          alert((err as any)?.response?.data?.error || (err instanceof Error ? err.message : 'Erreur'));
+                        }
+                      }}
+                    >+ Groupe</button>
+                  ) : (
+                    <button
+                      className="btn btn-sm btn-success"
+                      style={{ fontSize: 10, padding: '2px 6px' }}
+                      onClick={() => handleInviteMember(a.id)}
+                    >+ Inviter</button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Sidebar */}
-      <div className="adventure-sidebar">
-        {/* Group members */}
-        {group.personnages && group.personnages.length > 0 && (
-          <>
-            <h3>Groupe — {group.nom}</h3>
-            <div className="adventure-group-members">
-              {group.personnages.map(({ personnage: p }) => (
-                <button
-                  key={p.id}
-                  className="adventure-member-card"
-                  onClick={() => navigate(
-                    `/game/characters?playerId=${group.joueurId}&groupId=${groupIdParam}&charId=${p.id}`
-                  )}
-                  title={`Voir la fiche de ${p.nom}`}
-                >
-                  <div className="adventure-member-portrait">
-                    {p.nom.charAt(0).toUpperCase()}
-                  </div>
-                  <div className="adventure-member-info">
-                    <div className="adventure-member-name">{p.nom}</div>
-                    <div className="adventure-member-meta">Niv. {p.niveau} · {p.race?.nom}</div>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </>
-        )}
-
-        <h3 style={{ marginTop: group.personnages?.length ? 16 : 0 }}>Informations</h3>
-        <div className="adventure-info">
-          <div><strong>Map :</strong> {mapData.nom}</div>
-          <div><strong>Type :</strong> {mapData.type}</div>
-          <div><strong>Mode :</strong> {mapData.combatMode}</div>
-          <div><strong>Region :</strong> {mapData.region?.nom}</div>
-          <div><strong>Taille :</strong> {mapData.largeur}x{mapData.hauteur}</div>
-          <div><strong>Position :</strong> ({group.positionX}, {group.positionY})</div>
+      {/* BOTTOM BAR */}
+      <div className="adv-bottom-bar">
+        <div className="adv-bottom-actions">
+          <button className="btn btn-sm btn-info" onClick={() => setShowWorldMap(true)}>Carte du monde</button>
+          {mapData.combatMode === 'MANUEL' && (
+            <button className="btn btn-sm btn-secondary" onClick={handleSpawnEnemies}>Spawn ennemis</button>
+          )}
+          <button className="btn btn-sm btn-secondary" onClick={handleLeaveMap}>Quitter map</button>
+          <button className="btn btn-sm btn-secondary" onClick={() => navigate('/game/dashboard')}>Retour au camp</button>
         </div>
 
-        {/* World map button */}
-        <button className="btn btn-info" style={{ marginTop: 16, width: '100%' }}
-          onClick={() => setShowWorldMap(true)}>
-          Carte du monde
-        </button>
-
-        {/* Connections list */}
-        {mapData.connectionsFrom && mapData.connectionsFrom.length > 0 && (
-          <>
-            <h4 style={{ marginTop: 16 }}>Portails ({mapData.connectionsFrom.length})</h4>
-            <div className="adventure-enemies">
-              {mapData.connectionsFrom.map(conn => (
-                <div key={conn.id} className="adventure-enemy-card" style={{
-                  borderLeft: conn.donjonId ? '3px solid #8e24aa' : '3px solid #1976d2',
-                }}>
-                  <div style={{ fontWeight: 600, fontSize: 13 }}>
-                    {conn.donjonId ? '\u2694\ufe0f' : '\u{1F6AA}'} {conn.nom}
-                  </div>
-                  <div className="meta">Pos: ({conn.positionX}, {conn.positionY})</div>
-                  {conn.donjon && (
-                    <div style={{ fontSize: 11, color: '#8e24aa' }}>
-                      Donjon: {conn.donjon.nom} (Niv.{conn.donjon.niveauMin}-{conn.donjon.niveauMax})
-                    </div>
-                  )}
-                  {conn.toMap && !conn.donjonId && (
-                    <div style={{ fontSize: 11, color: '#666' }}>
-                      Vers: {conn.toMap.nom}
-                    </div>
-                  )}
-                </div>
-              ))}
+        <div className="adv-bottom-info">
+          {playerOnConnection ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontWeight: 600 }}>
+                {playerOnConnection.donjonId ? '⚔️' : '🚪'} {playerOnConnection.nom}
+                {playerOnConnection.donjon && (
+                  <span style={{ fontWeight: 400, color: 'var(--text-muted)', marginLeft: 6, fontSize: 11 }}>
+                    Niv.{playerOnConnection.donjon.niveauMin}-{playerOnConnection.donjon.niveauMax}
+                  </span>
+                )}
+              </span>
+              <button
+                className="btn btn-sm btn-primary"
+                onClick={() => {
+                  if (playerOnConnection.donjonId && playerOnConnection.donjon) {
+                    setDungeonModal({ connection: playerOnConnection });
+                  } else {
+                    setPortalModal({ connection: playerOnConnection });
+                  }
+                }}
+              >
+                {playerOnConnection.donjonId ? 'Entrer dans le donjon' : 'Utiliser le portail'}
+              </button>
             </div>
-          </>
-        )}
+          ) : selectedCell ? (() => {
+            const { x, y } = selectedCell;
+            const selEnemy = enemies.find(ge => ge.positionX === x && ge.positionY === y);
+            const selConn = connectionAt.get(`${x},${y}`);
+            const selPnj = pnjAt.get(`${x},${y}`);
+            const selAlly = alliedAt.get(`${x},${y}`);
 
-        {/* Enemies list */}
-        {enemies.length > 0 && (
-          <>
-            <h4 style={{ marginTop: 16 }}>Ennemis ({enemies.length})</h4>
-            <div className="adventure-enemies">
-              {enemies.map(ge => (
-                <div key={ge.id} className="adventure-enemy-card">
-                  <div className="meta">Pos: ({ge.positionX}, {ge.positionY})</div>
-                  <div style={{ fontSize: 12 }}>
-                    {ge.membres?.map(m => `${m.monstre?.nom} x${m.quantite} Niv.${m.niveau}`).join(', ')}
-                  </div>
-                  <button className="btn btn-sm btn-danger" style={{ marginTop: 4 }}
-                    onClick={() => setEnemyModal({ group: ge })}>Engager</button>
+            if (selEnemy) {
+              return (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span>⚔ {selEnemy.membres?.map(m => `${m.monstre?.nom} x${m.quantite} Niv.${m.niveau}`).join(', ')}</span>
+                  <button className="btn btn-sm btn-danger" onClick={() => handleEngage(selEnemy.id)}>Engager</button>
                 </div>
-              ))}
-            </div>
-          </>
-        )}
-
-        {/* Spawn button */}
-        {mapData.combatMode === 'MANUEL' && (
-          <button className="btn btn-sm btn-secondary" style={{ marginTop: 16, width: '100%' }}
-            onClick={handleSpawnEnemies}>
-            Spawn ennemis
-          </button>
-        )}
-
-        {/* Legend */}
-        <h4 style={{ marginTop: 16 }}>Legende</h4>
-        <div className="adventure-legend">
-          <div><span className="legend-icon legend-player">P</span> Votre groupe</div>
-          <div><span className="legend-icon legend-enemy">E</span> Ennemis</div>
-          <div><span className="legend-icon legend-edge">&rarr;</span> Sortie de map</div>
-          <div><span className="legend-icon" style={{ background: '#90caf9', border: '1px solid #1976d2' }}>{'\u{1F6AA}'}</span> Portail</div>
-          <div><span className="legend-icon" style={{ background: '#ce93d8', border: '1px solid #8e24aa' }}>{'\u2694'}</span> Donjon</div>
+              );
+            }
+            if (selConn) {
+              return (
+                <span>
+                  {selConn.donjonId ? '⚔️' : '🚪'} <strong>{selConn.nom}</strong>
+                  {selConn.donjon && ` — Donjon Niv.${selConn.donjon.niveauMin}-${selConn.donjon.niveauMax}`}
+                  {selConn.toMap && !selConn.donjonId && ` → ${selConn.toMap.nom}`}
+                </span>
+              );
+            }
+            if (selPnj) {
+              const status = pnjStatus.get(selPnj.id);
+              return (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span>
+                    💬 {selPnj.nom}
+                    {status?.hasPending && <span style={{ color: '#ff9800', marginLeft: 4 }}>?</span>}
+                    {!status?.hasPending && status?.hasAvailable && <span style={{ color: '#4caf50', marginLeft: 4 }}>!</span>}
+                  </span>
+                  <button
+                    className="btn btn-sm btn-secondary"
+                    onClick={async () => {
+                      const chars = isSoloMode ? (character ? [character] : []) : getGroupChars();
+                      if (chars.length > 0) await openPnjModal(selPnj, chars[0].id, chars);
+                    }}
+                  >Parler</button>
+                </div>
+              );
+            }
+            if (selAlly) {
+              return <span>Allié : {selAlly.nom} — Niv. {selAlly.niveau}</span>;
+            }
+            return <span style={{ color: 'var(--text-muted)' }}>Case ({x}, {y})</span>;
+          })() : (
+            <span style={{ color: 'var(--text-muted)' }}>Cliquez une case pour voir les détails</span>
+          )}
         </div>
       </div>
 
@@ -744,34 +1044,6 @@ const MapPage: React.FC = () => {
         </div>
       )}
 
-      {/* Enemy group modal */}
-      {enemyModal && (
-        <div className="modal-overlay" onClick={() => setEnemyModal(null)}>
-          <div className="worldmap-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 380 }}>
-            <div className="worldmap-header">
-              <h2>Groupe ennemi</h2>
-              <button className="btn btn-secondary" onClick={() => setEnemyModal(null)}>×</button>
-            </div>
-            <div style={{ padding: 20 }}>
-              {enemyModal.group.membres?.map(m => (
-                <div key={m.id} style={{ marginBottom: 8 }}>
-                  <strong>{m.monstre?.nom ?? `Monstre ${m.monstreId}`}</strong>
-                  {' '}×{m.quantite}
-                  <span className="meta"> Niv. {m.niveau}</span>
-                </div>
-              ))}
-              <button
-                className="btn btn-danger"
-                style={{ marginTop: 16, width: '100%' }}
-                onClick={() => { setEnemyModal(null); handleEngage(enemyModal.group.id); }}
-              >
-                Attaquer
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Dungeon entry modal */}
       {dungeonModal && (
         <div className="modal-overlay" onClick={() => setDungeonModal(null)}>
@@ -798,465 +1070,302 @@ const MapPage: React.FC = () => {
                     <button
                       key={d}
                       className={`btn ${selectedDifficulty === d ? 'btn-primary' : 'btn-secondary'}`}
-                      style={{ flex: 1, fontSize: 16 }}
                       onClick={() => setSelectedDifficulty(d)}
                     >
-                      {d} {d === 4 ? '(Facile)' : d === 6 ? '(Normal)' : '(Difficile)'}
+                      {d}
                     </button>
                   ))}
                 </div>
               </div>
-              <button
-                className="btn btn-primary"
-                style={{ width: '100%', marginTop: 8, padding: '10px 0', fontSize: 15 }}
-                onClick={handleEnterDungeon}
-                disabled={moving}
-              >
-                Entrer dans le donjon
+              <button className="btn btn-danger" style={{ width: '100%' }} onClick={handleEnterDungeon}>
+                Entrer
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Dialogue modal (quêtes PNJ) */}
-      {dialogueModal && (
-        <div className="modal-overlay" onClick={() => setDialogueModal(null)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 520 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <h2 style={{ margin: 0 }}>💬 {dialogueModal.pnj.nom}</h2>
-              <button className="btn btn-secondary btn-sm" onClick={() => setDialogueModal(null)}>Fermer</button>
-            </div>
-
-            {/* Character selector */}
-            {dialogueModal.chars.length > 0 && (
-              <div style={{ marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <label style={{ fontWeight: 600, whiteSpace: 'nowrap', fontSize: 13 }}>Personnage :</label>
-                <select
-                  value={dialogueModal.personnageId}
-                  onChange={async (e) => {
-                    const id = Number(e.target.value);
-                    setDialogueFeedback(null);
-                    setDialogueRecompenses(null);
-                    const updated = await queteApi.interact(dialogueModal.pnj.id, id);
-                    setDialogueModal(prev => prev ? { ...prev, personnageId: id, interactData: updated } : null);
-                  }}
-                  style={{ flex: 1 }}
-                >
-                  {dialogueModal.chars.map(c => (
-                    <option key={c.id} value={c.id}>{c.nom} — Niv. {c.niveau}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {dialogueFeedback && (
-              <div style={{ padding: '8px 12px', marginBottom: 10, borderRadius: 6, background: '#1b5e20', color: 'white' }}>
-                {dialogueFeedback}
-              </div>
-            )}
-
-            {dialogueRecompenses && (
-              <div style={{ padding: '8px 12px', marginBottom: 10, borderRadius: 6, background: '#1a237e', color: 'white' }}>
-                <strong>Récompenses :</strong>
-                {dialogueRecompenses.xp > 0 && <div>{dialogueRecompenses.xp} XP</div>}
-                {dialogueRecompenses.or > 0 && <div>{dialogueRecompenses.or} or</div>}
-                {dialogueRecompenses.ressources.map((r, i) => <div key={i}>{r.quantite}x {r.nom}</div>)}
-                {dialogueRecompenses.items.map((it, i) => <div key={i}>Équip: {it.nom}</div>)}
-              </div>
-            )}
-
-            {/* Nouvelles quêtes disponibles */}
-            {dialogueModal.interactData.quetesDisponibles.length > 0 && (
-              <div style={{ marginBottom: 16 }}>
-                <h4 style={{ margin: '0 0 8px', color: 'var(--text-muted)' }}>NOUVELLES QUÊTES</h4>
-                {dialogueModal.interactData.quetesDisponibles.map(q => (
-                  <div key={q.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', background: 'var(--bg-secondary)', borderRadius: 6, marginBottom: 6 }}>
-                    <div>
-                      <strong>{q.nom}</strong>
-                      <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{q.description}</div>
-                    </div>
-                    <button
-                      className="btn btn-primary btn-sm"
-                      onClick={async () => {
-                        try {
-                          await queteApi.acceptQuest(dialogueModal.pnj.id, dialogueModal.personnageId, q.id);
-                          setDialogueFeedback(`Quête "${q.nom}" acceptée !`);
-                          const updated = await queteApi.interact(dialogueModal.pnj.id, dialogueModal.personnageId);
-                          setDialogueModal(prev => prev ? { ...prev, interactData: updated } : null);
-                        } catch (e: any) {
-                          setDialogueFeedback(e?.response?.data?.error || 'Erreur');
-                        }
-                      }}
-                    >
-                      Accepter
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Étapes en attente */}
-            {dialogueModal.interactData.etapesEnAttente.length > 0 && (
-              <div style={{ marginBottom: 16 }}>
-                <h4 style={{ margin: '0 0 8px', color: 'var(--text-muted)' }}>OBJECTIFS EN ATTENTE</h4>
-                {dialogueModal.interactData.etapesEnAttente.map((qp: QuetePersonnage) => {
-                  const etape = qp.quete.etapes.find(e => e.ordre === qp.etapeActuelle);
-                  return (
-                    <div key={qp.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '8px 10px', background: 'var(--bg-secondary)', borderRadius: 6, marginBottom: 6 }}>
-                      <div>
-                        <strong>{qp.quete.nom}</strong>
-                        <div style={{ fontSize: 12 }}>Étape {qp.etapeActuelle}/{qp.quete.etapes.length} : {etape?.description}</div>
-                        {etape?.type === 'APPORTER_RESSOURCE' && etape.ressource && (
-                          <div style={{ fontSize: 12, color: 'var(--warning)', marginTop: 2 }}>
-                            Requis : {etape.quantite ?? 1}× {etape.ressource.nom}
-                          </div>
-                        )}
-                        {etape?.type === 'APPORTER_EQUIPEMENT' && etape.equipement && (
-                          <div style={{ fontSize: 12, color: '#66bb6a', marginTop: 2 }}>
-                            Requis : {etape.quantite ?? 1}× {etape.equipement.nom}
-                          </div>
-                        )}
-                      </div>
-                      <button
-                        className="btn btn-primary btn-sm"
-                        style={{ marginLeft: 8, flexShrink: 0 }}
-                        onClick={async () => {
-                          try {
-                            const result = await queteApi.advanceQuest(dialogueModal.pnj.id, dialogueModal.personnageId, qp.id);
-                            if (result.questComplete) {
-                              setDialogueFeedback(`Quête "${qp.quete.nom}" terminée !`);
-                              setDialogueRecompenses(result.recompenses ?? null);
-                            } else {
-                              setDialogueFeedback('Étape accomplie !');
-                            }
-                            const updated = await queteApi.interact(dialogueModal.pnj.id, dialogueModal.personnageId);
-                            setDialogueModal(prev => prev ? { ...prev, interactData: updated } : null);
-                          } catch (e: any) {
-                            setDialogueFeedback(e?.response?.data?.error || 'Erreur');
-                          }
-                        }}
-                      >
-                        {(etape?.type === 'APPORTER_RESSOURCE' || etape?.type === 'APPORTER_EQUIPEMENT') ? 'Remettre' : 'Continuer'}
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {dialogueModal.interactData.quetesDisponibles.length === 0 && dialogueModal.interactData.etapesEnAttente.length === 0 && !dialogueFeedback && (
-              <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: 12 }}>Pas de quête disponible pour l'instant.</p>
-            )}
-
-            {/* Bouton boutique si marchand */}
-            {dialogueModal.interactData.estMarchand && (
-              <div style={{ marginTop: 12, borderTop: '1px solid var(--border-color)', paddingTop: 12 }}>
-                <button
-                  className="btn btn-secondary"
-                  style={{ width: '100%' }}
-                  onClick={async () => {
-                    const full = await pnjApi.getById(dialogueModal.pnj.id);
-                    setMerchantModal(full);
-                    setMerchantTab('buy');
-                    setMerchantFeedback({});
-                    setMerchantInventory(null);
-                    const g = await groupsApi.getById(group.id);
-                    const chars = g.personnages?.map((gp: any) => gp.personnage).filter(Boolean) ?? [];
-                    setMerchantChars(chars);
-                    if (chars.length > 0) {
-                      setMerchantPersonnageId(chars[0].id);
-                      const inv = await charactersApi.getInventory(chars[0].id);
-                      setMerchantInventory(inv);
-                    }
-                    setDialogueModal(null);
-                  }}
-                >
-                  Ouvrir la boutique
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Merchant modal */}
-      {merchantModal && (
-        <div className="modal-overlay" onClick={() => setMerchantModal(null)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 580, maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <h2 style={{ margin: 0 }}>💬 {merchantModal.nom}</h2>
-              <button className="btn btn-secondary btn-sm" onClick={() => setMerchantModal(null)}>Fermer</button>
-            </div>
-
-            {/* Character selector */}
-            {merchantChars.length > 0 && (
-              <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <label style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>Personnage :</label>
-                <select
-                  value={merchantPersonnageId ?? ''}
-                  onChange={async (e) => {
-                    const id = Number(e.target.value);
-                    setMerchantPersonnageId(id);
-                    setMerchantFeedback({});
-                    setMerchantInventory(null);
-                    const inv = await charactersApi.getInventory(id);
-                    setMerchantInventory(inv);
-                  }}
-                  style={{ flex: 1 }}
-                >
-                  {merchantChars.map(c => (
-                    <option key={c.id} value={c.id}>{c.nom}</option>
-                  ))}
-                </select>
-                {merchantInventory && (
-                  <span style={{ color: '#ffd700', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                    💰 {merchantInventory.or} or
-                  </span>
-                )}
-              </div>
-            )}
-
-            {/* Tabs */}
-            <div style={{ display: 'flex', gap: 4, marginBottom: 12 }}>
-              <button
-                className={`btn btn-sm ${merchantTab === 'buy' ? 'btn-primary' : 'btn-secondary'}`}
-                onClick={() => { setMerchantTab('buy'); setMerchantFeedback({}); }}
-              >
-                Acheter
-              </button>
-              <button
-                className={`btn btn-sm ${merchantTab === 'sell' ? 'btn-primary' : 'btn-secondary'}`}
-                onClick={() => { setMerchantTab('sell'); setMerchantFeedback({}); }}
-              >
-                Vendre
-              </button>
-            </div>
-
-            {/* Tab content */}
-            <div style={{ overflow: 'auto', flex: 1 }}>
-              {merchantTab === 'buy' ? (
-                <div>
-                  {merchantModal.lignes.filter(l => l.prixMarchand != null).length === 0 ? (
-                    <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: 16 }}>
-                      Ce marchand n'a rien à vendre.
-                    </p>
-                  ) : (
-                    merchantModal.lignes.filter(l => l.prixMarchand != null).map(l => {
-                      const name = l.equipement?.nom ?? l.ressource?.nom ?? `Article #${l.id}`;
-                      const fb = merchantFeedback[String(l.id)];
-                      return (
-                        <div key={l.id} style={{
-                          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                          padding: '8px 12px', marginBottom: 6, background: 'var(--surface-2, #2a2a2a)',
-                          borderRadius: 6, gap: 8,
-                        }}>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontWeight: 600, fontSize: 14 }}>{name}</div>
-                            {l.equipement && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{l.equipement.slot}</div>}
-                            {fb && (
-                              <div style={{ fontSize: 12, color: fb.ok ? '#66bb6a' : '#ef5350', marginTop: 2 }}>{fb.msg}</div>
-                            )}
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                            <span style={{ color: '#ffd700', fontWeight: 600 }}>{l.prixMarchand} or</span>
-                            <button
-                              className="btn btn-sm btn-primary"
-                              disabled={!merchantPersonnageId}
-                              onClick={async () => {
-                                if (!merchantPersonnageId) return;
-                                try {
-                                  await pnjApi.buy(merchantModal.id, { personnageId: merchantPersonnageId, ligneId: l.id });
-                                  setMerchantFeedback(prev => ({ ...prev, [String(l.id)]: { ok: true, msg: 'Acheté !' } }));
-                                  const inv = await charactersApi.getInventory(merchantPersonnageId);
-                                  setMerchantInventory(inv);
-                                } catch (err: unknown) {
-                                  const msg = (err as any)?.response?.data?.error || (err instanceof Error ? err.message : 'Erreur');
-                                  setMerchantFeedback(prev => ({ ...prev, [String(l.id)]: { ok: false, msg } }));
-                                }
-                              }}
-                            >
-                              Acheter
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              ) : (
-                <div>
-                  {!merchantInventory ? (
-                    <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: 16 }}>Chargement de l'inventaire...</p>
-                  ) : (() => {
-                    const rachatLines = merchantModal.lignes.filter(l => l.prixRachat != null);
-                    const sellableItems = merchantInventory.items.filter(item =>
-                      !item.estEquipe && rachatLines.some(l => l.equipementId === item.equipementId)
-                    );
-                    const sellableResources = merchantInventory.ressources.filter(res =>
-                      rachatLines.some(l => l.ressourceId === res.ressourceId)
-                    );
-
-                    if (sellableItems.length === 0 && sellableResources.length === 0) {
-                      return (
-                        <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: 16 }}>
-                          Ce marchand n'achète rien de ce que vous possédez.
-                        </p>
-                      );
-                    }
-
-                    return (
-                      <>
-                        {sellableItems.map(item => {
-                          const ligne = rachatLines.find(l => l.equipementId === item.equipementId)!;
-                          const fb = merchantFeedback[`item_${item.id}`];
-                          return (
-                            <div key={item.id} style={{
-                              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                              padding: '8px 12px', marginBottom: 6, background: 'var(--surface-2, #2a2a2a)',
-                              borderRadius: 6, gap: 8,
-                            }}>
-                              <div style={{ flex: 1 }}>
-                                <div style={{ fontWeight: 600, fontSize: 14 }}>{item.nom}</div>
-                                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{item.slot}</div>
-                                {fb && (
-                                  <div style={{ fontSize: 12, color: fb.ok ? '#66bb6a' : '#ef5350', marginTop: 2 }}>{fb.msg}</div>
-                                )}
-                              </div>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                                <span style={{ color: '#ffd700', fontWeight: 600 }}>{ligne.prixRachat} or</span>
-                                <button
-                                  className="btn btn-sm btn-secondary"
-                                  disabled={!merchantPersonnageId}
-                                  onClick={async () => {
-                                    if (!merchantPersonnageId) return;
-                                    try {
-                                      await pnjApi.sell(merchantModal.id, { personnageId: merchantPersonnageId, ligneId: ligne.id, itemId: item.id });
-                                      setMerchantFeedback(prev => ({ ...prev, [`item_${item.id}`]: { ok: true, msg: 'Vendu !' } }));
-                                      const inv = await charactersApi.getInventory(merchantPersonnageId);
-                                      setMerchantInventory(inv);
-                                    } catch (err: unknown) {
-                                      const msg = (err as any)?.response?.data?.error || (err instanceof Error ? err.message : 'Erreur');
-                                      setMerchantFeedback(prev => ({ ...prev, [`item_${item.id}`]: { ok: false, msg } }));
-                                    }
-                                  }}
-                                >
-                                  Vendre
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                        {sellableResources.map(res => {
-                          const ligne = rachatLines.find(l => l.ressourceId === res.ressourceId)!;
-                          const fb = merchantFeedback[`res_${res.ressourceId}`];
-                          return (
-                            <div key={res.ressourceId} style={{
-                              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                              padding: '8px 12px', marginBottom: 6, background: 'var(--surface-2, #2a2a2a)',
-                              borderRadius: 6, gap: 8,
-                            }}>
-                              <div style={{ flex: 1 }}>
-                                <div style={{ fontWeight: 600, fontSize: 14 }}>{res.nom}</div>
-                                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>×{res.quantite} en stock</div>
-                                {fb && (
-                                  <div style={{ fontSize: 12, color: fb.ok ? '#66bb6a' : '#ef5350', marginTop: 2 }}>{fb.msg}</div>
-                                )}
-                              </div>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                                <span style={{ color: '#ffd700', fontWeight: 600 }}>{ligne.prixRachat} or / unité</span>
-                                <button
-                                  className="btn btn-sm btn-secondary"
-                                  disabled={!merchantPersonnageId}
-                                  onClick={async () => {
-                                    if (!merchantPersonnageId) return;
-                                    try {
-                                      await pnjApi.sell(merchantModal.id, { personnageId: merchantPersonnageId, ligneId: ligne.id });
-                                      setMerchantFeedback(prev => ({ ...prev, [`res_${res.ressourceId}`]: { ok: true, msg: 'Vendu !' } }));
-                                      const inv = await charactersApi.getInventory(merchantPersonnageId);
-                                      setMerchantInventory(inv);
-                                    } catch (err: unknown) {
-                                      const msg = (err as any)?.response?.data?.error || (err instanceof Error ? err.message : 'Erreur');
-                                      setMerchantFeedback(prev => ({ ...prev, [`res_${res.ressourceId}`]: { ok: false, msg } }));
-                                    }
-                                  }}
-                                >
-                                  Vendre 1
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </>
-                    );
-                  })()}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Portal network modal */}
-      {portalModal && group && (
+      {/* Network portal selection modal */}
+      {portalModal && (
         <div className="modal-overlay" onClick={() => setPortalModal(null)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 500, maxHeight: '70vh', overflow: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <h2 style={{ margin: 0 }}>Choisir une destination</h2>
-              <button className="btn btn-secondary btn-sm" onClick={() => setPortalModal(null)}>Fermer</button>
+          <div className="worldmap-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 420 }}>
+            <div className="worldmap-header">
+              <h2>Portail — {portalModal.connection.nom}</h2>
+              <button className="btn btn-secondary" onClick={() => setPortalModal(null)}>Fermer</button>
             </div>
-            <p style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 12 }}>
-              Portail : <strong>{portalModal.connection.nom}</strong>
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ padding: 20 }}>
+              <p style={{ marginBottom: 12, fontSize: 14 }}>Choisissez la destination :</p>
               {allPortals
-                .filter(p => p.id !== portalModal.connection.id)
+                .filter(p => p.id !== portalModal.connection.id && !p.donjonId)
                 .map(dest => (
                   <button
                     key={dest.id}
                     className="btn btn-secondary"
-                    style={{ textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                    disabled={moving}
-                    onClick={async () => {
-                      setMoving(true);
-                      try {
-                        const result = await groupsApi.useConnection(group.id, portalModal.connection.id, undefined, dest.id);
-                        setPortalModal(null);
-                        if (result?.combat) {
-                          navigate(`/game/combat/${result.combat.id}`);
-                          return;
-                        }
-                        await loadGroup(group.id);
-                      } catch (err: unknown) {
-                        const msg = (err as any)?.response?.data?.error || (err instanceof Error ? err.message : 'Erreur');
-                        alert(msg);
-                      } finally {
-                        setMoving(false);
-                      }
-                    }}
+                    style={{ display: 'block', width: '100%', marginBottom: 8, textAlign: 'left' }}
+                    onClick={() => handleUsePortal(portalModal.connection, dest.id)}
                   >
-                    <span>
-                      <strong>{dest.nom}</strong>
-                    </span>
-                    <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 8 }}>
-                      {dest.fromMap?.nom}
-                      {dest.fromMap && (
-                        <span style={{
-                          marginLeft: 6, padding: '1px 6px', borderRadius: 4, fontSize: 11,
-                          background: dest.fromMap.type === 'VILLE' ? '#4caf50' : dest.fromMap.type === 'SAFE' ? '#2196f3' : '#9e9e9e',
-                          color: 'white',
-                        }}>{dest.fromMap.type}</span>
-                      )}
-                    </span>
+                    {dest.nom}
+                    {dest.fromMap && <span className="meta" style={{ marginLeft: 8 }}>({dest.fromMap.nom})</span>}
                   </button>
                 ))}
-              {allPortals.filter(p => p.id !== portalModal.connection.id).length === 0 && (
-                <p style={{ color: 'var(--text-muted)', textAlign: 'center' }}>Aucune autre destination disponible.</p>
-              )}
             </div>
           </div>
         </div>
       )}
+
+      {/* Unified PNJ modal */}
+      {pnjModal && (() => {
+        const { pnj, interactData, personnageId, chars, activeTab } = pnjModal;
+        const hasQuestContent = (interactData.quetesDisponibles?.length ?? 0) > 0 || (interactData.etapesEnAttente?.length ?? 0) > 0;
+        const dialogueTexte = interactData.dialogueTexte ?? null;
+
+        const currentMapId = isSoloMode ? character?.mapId : group?.leader?.mapId;
+        const currentMemberIds = isSoloMode ? (character ? [character.id] : []) : ((group?.personnages ?? []).map((gp: any) => gp.personnage.id));
+
+        return (
+          <div className="modal-overlay" onClick={() => setPnjModal(null)}>
+            <div className="worldmap-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 520 }}>
+              <div className="worldmap-header">
+                <h2>💬 {pnj.nom}</h2>
+                <button className="btn btn-secondary" onClick={() => setPnjModal(null)}>Fermer</button>
+              </div>
+
+              {interactData.estMarchand && (
+                <div style={{ display: 'flex', gap: 4, padding: '0 20px 0', borderBottom: '1px solid var(--border)', marginBottom: 0 }}>
+                  {(['dialogue', 'boutique'] as const).map(tab => (
+                    <button
+                      key={tab}
+                      className={`btn btn-sm ${activeTab === tab ? 'btn-primary' : 'btn-secondary'}`}
+                      style={{ borderRadius: '4px 4px 0 0', marginBottom: -1 }}
+                      onClick={() => setPnjModal(prev => prev ? { ...prev, activeTab: tab } : null)}
+                    >
+                      {tab === 'dialogue' ? 'Dialogue' : 'Boutique'}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <div style={{ padding: 20 }}>
+                {activeTab === 'dialogue' && (
+                  <>
+                    {dialogueTexte && (
+                      <p style={{ fontStyle: 'italic', color: 'var(--text-muted)', marginBottom: 16, borderLeft: '3px solid var(--border)', paddingLeft: 12 }}>
+                        "{dialogueTexte}"
+                      </p>
+                    )}
+
+                    {chars.length > 1 && (
+                      <div style={{ marginBottom: 12 }}>
+                        <label style={{ fontWeight: 600, display: 'block', marginBottom: 4 }}>Personnage :</label>
+                        <select
+                          value={personnageId}
+                          onChange={async e => {
+                            const newCharId = Number(e.target.value);
+                            const newInteract = await queteApi.interact(pnj.id, newCharId);
+                            setPnjFeedback(null);
+                            setPnjRecompenses(null);
+                            setPnjModal(prev => prev ? { ...prev, personnageId: newCharId, interactData: newInteract } : null);
+                            if (currentMapId && currentMemberIds.length > 0) refreshPnjStatus(currentMapId, currentMemberIds);
+                          }}
+                          style={{ minWidth: 180 }}
+                        >
+                          {chars.map(c => <option key={c.id} value={c.id}>{c.nom}</option>)}
+                        </select>
+                      </div>
+                    )}
+
+                    {pnjFeedback && (
+                      <div style={{ padding: '8px 12px', marginBottom: 12, background: 'var(--success-bg, #1b5e20)', borderRadius: 6, color: 'var(--success, #a5d6a7)', fontSize: 13 }}>
+                        {pnjFeedback}
+                      </div>
+                    )}
+                    {pnjRecompenses && (
+                      <div style={{ padding: '8px 12px', marginBottom: 12, background: '#3e2700', borderRadius: 6, color: '#ffca28', fontSize: 13 }}>
+                        <strong>Recompenses :</strong>
+                        <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
+                          {pnjRecompenses.xp > 0 && <li>{pnjRecompenses.xp} XP</li>}
+                          {pnjRecompenses.or > 0 && <li>{pnjRecompenses.or} or</li>}
+                          {pnjRecompenses.ressources.map((r, i) => <li key={i}>{r.quantite}x {r.nom}</li>)}
+                          {pnjRecompenses.items.map((it, i) => <li key={i}>{it.nom}</li>)}
+                        </ul>
+                      </div>
+                    )}
+
+                    {interactData.quetesDisponibles?.length > 0 && (
+                      <div style={{ marginBottom: 16 }}>
+                        <h4 style={{ margin: '0 0 8px' }}>Quetes disponibles</h4>
+                        {interactData.quetesDisponibles.map((q: any) => (
+                          <div key={q.id} style={{ marginBottom: 8, padding: 10, background: 'var(--card-bg)', borderRadius: 6, border: '1px solid var(--border)' }}>
+                            <div style={{ fontWeight: 600 }}>{q.nom}</div>
+                            {q.description && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{q.description}</div>}
+                            <button
+                              className="btn btn-sm btn-primary"
+                              style={{ marginTop: 6 }}
+                              onClick={async () => {
+                                try {
+                                  await queteApi.acceptQuest(pnj.id, personnageId, q.id);
+                                  const newInteract = await queteApi.interact(pnj.id, personnageId);
+                                  setPnjFeedback(`Quete "${q.nom}" acceptee !`);
+                                  setPnjModal(prev => prev ? { ...prev, interactData: newInteract } : null);
+                                  if (currentMapId && currentMemberIds.length > 0) refreshPnjStatus(currentMapId, currentMemberIds);
+                                } catch (err: unknown) {
+                                  setPnjFeedback((err as any)?.response?.data?.error || (err instanceof Error ? err.message : 'Erreur'));
+                                }
+                              }}
+                            >
+                              Accepter
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {interactData.etapesEnAttente?.length > 0 && (
+                      <div style={{ marginBottom: 16 }}>
+                        <h4 style={{ margin: '0 0 8px' }}>Etapes en attente</h4>
+                        {interactData.etapesEnAttente.map((ep: any) => (
+                          <div key={ep.id} style={{ marginBottom: 8, padding: 10, background: 'var(--card-bg)', borderRadius: 6, border: '1px solid var(--border)' }}>
+                            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{ep.quete?.nom} — Etape {ep.etapeActuelle}</div>
+                            <div style={{ fontWeight: 600, marginTop: 2 }}>{ep.etapeInfo?.description ?? ep.etapeInfo?.type}</div>
+                            {(ep.etapeInfo?.type === 'APPORTER_RESSOURCE' || ep.etapeInfo?.type === 'APPORTER_EQUIPEMENT') && ep.etapeInfo?.quantite && (
+                              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                                Requis : {ep.etapeInfo.quantite}× {ep.etapeInfo.ressource?.nom ?? ep.etapeInfo.equipement?.nom}
+                              </div>
+                            )}
+                            <button
+                              className="btn btn-sm btn-success"
+                              style={{ marginTop: 6 }}
+                              onClick={async () => {
+                                try {
+                                  const res = await queteApi.advanceQuest(pnj.id, personnageId, ep.id);
+                                  setPnjFeedback(res.questComplete ? 'Quete terminee !' : 'Etape validee !');
+                                  if (res.recompenses) setPnjRecompenses(res.recompenses);
+                                  const newInteract = await queteApi.interact(pnj.id, personnageId);
+                                  setPnjModal(prev => prev ? { ...prev, interactData: newInteract } : null);
+                                  if (currentMapId && currentMemberIds.length > 0) refreshPnjStatus(currentMapId, currentMemberIds);
+                                } catch (err: unknown) {
+                                  setPnjFeedback((err as any)?.response?.data?.error || (err instanceof Error ? err.message : 'Erreur'));
+                                }
+                              }}
+                            >
+                              Remettre / Valider
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {!hasQuestContent && !interactData.estMarchand && (
+                      <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>{dialogueTexte ? '' : 'Rien de special pour l\'instant.'}</p>
+                    )}
+                  </>
+                )}
+
+                {activeTab === 'boutique' && (
+                  <>
+                    <div style={{ marginBottom: 12, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <label style={{ fontWeight: 600 }}>Personnage :</label>
+                      <select
+                        value={merchantPersonnageId ?? ''}
+                        onChange={async e => {
+                          const id = Number(e.target.value);
+                          setMerchantPersonnageId(id);
+                          setMerchantFeedback({});
+                          const inv = await charactersApi.getInventory(id);
+                          setMerchantInventory(inv);
+                        }}
+                        style={{ minWidth: 160 }}
+                      >
+                        {chars.map(c => (
+                          <option key={c.id} value={c.id}>{c.nom} ({merchantInventory && merchantPersonnageId === c.id ? `${merchantInventory.or} or` : '...'})</option>
+                        ))}
+                      </select>
+                      {merchantInventory && <span className="meta">{merchantInventory.or} or disponible</span>}
+                    </div>
+                    <div style={{ display: 'flex', gap: 4, marginBottom: 12 }}>
+                      {(['buy', 'sell'] as const).map(t => (
+                        <button key={t} className={`btn btn-sm ${merchantTab === t ? 'btn-primary' : 'btn-secondary'}`}
+                          onClick={() => setMerchantTab(t)}>
+                          {t === 'buy' ? 'Acheter' : 'Vendre'}
+                        </button>
+                      ))}
+                    </div>
+                    {merchantTab === 'buy' && pnj.lignes && (
+                      <div>
+                        {pnj.lignes.map((ligne: any) => {
+                          const nom = ligne.equipement?.nom ?? ligne.ressource?.nom ?? '?';
+                          const key = `buy-${ligne.id}`;
+                          const fb = merchantFeedback[key];
+                          return (
+                            <div key={ligne.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
+                              <div>
+                                <span style={{ fontWeight: 600 }}>{nom}</span>
+                                {ligne.ressource && <span className="meta" style={{ marginLeft: 6 }}>Ressource</span>}
+                                {ligne.equipement && <span className="meta" style={{ marginLeft: 6 }}>{ligne.equipement.slot}</span>}
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                {fb && <span style={{ fontSize: 12, color: fb.ok ? 'var(--success)' : 'var(--danger)' }}>{fb.msg}</span>}
+                                <span style={{ color: '#ffca28', fontWeight: 600 }}>{ligne.prixMarchand} or</span>
+                                <button className="btn btn-sm btn-primary" onClick={async () => {
+                                  if (!merchantPersonnageId) return;
+                                  try {
+                                    await pnjApi.buy(pnj.id, { personnageId: merchantPersonnageId, ligneId: ligne.id, quantite: 1 });
+                                    setMerchantFeedback(prev => ({ ...prev, [key]: { ok: true, msg: 'Acheté !' } }));
+                                    const inv = await charactersApi.getInventory(merchantPersonnageId);
+                                    setMerchantInventory(inv);
+                                  } catch (err: unknown) {
+                                    const msg = (err as any)?.response?.data?.error || (err instanceof Error ? err.message : 'Erreur');
+                                    setMerchantFeedback(prev => ({ ...prev, [key]: { ok: false, msg } }));
+                                  }
+                                }}>Acheter</button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {merchantTab === 'sell' && merchantInventory && (
+                      <div>
+                        {merchantInventory.items.map((item: any) => {
+                          const key = `sell-item-${item.id}`;
+                          const fb = merchantFeedback[key];
+                          const ligne = pnj.lignes?.find((l: any) => l.equipementId === item.equipementId);
+                          const prixRachat = ligne?.prixRachat ?? 0;
+                          return (
+                            <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
+                              <div>
+                                <span style={{ fontWeight: 600 }}>{item.nom}</span>
+                                <span className="meta" style={{ marginLeft: 6 }}>{item.slot}</span>
+                                {item.estEquipe && <span style={{ color: 'var(--warning)', fontSize: 11, marginLeft: 4 }}>Equipe</span>}
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                {fb && <span style={{ fontSize: 12, color: fb.ok ? 'var(--success)' : 'var(--danger)' }}>{fb.msg}</span>}
+                                <span style={{ color: '#ffca28', fontWeight: 600 }}>{prixRachat} or</span>
+                                <button className="btn btn-sm btn-warning" disabled={item.estEquipe} onClick={async () => {
+                                  if (!merchantPersonnageId) return;
+                                  try {
+                                    await pnjApi.sell(pnj.id, { personnageId: merchantPersonnageId, itemId: item.id, ligneId: 0 });
+                                    setMerchantFeedback(prev => ({ ...prev, [key]: { ok: true, msg: 'Vendu !' } }));
+                                    const inv = await charactersApi.getInventory(merchantPersonnageId);
+                                    setMerchantInventory(inv);
+                                  } catch (err: unknown) {
+                                    const msg = (err as any)?.response?.data?.error || (err instanceof Error ? err.message : 'Erreur');
+                                    setMerchantFeedback(prev => ({ ...prev, [key]: { ok: false, msg } }));
+                                  }
+                                }}>Vendre</button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };

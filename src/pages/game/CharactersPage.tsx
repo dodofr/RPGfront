@@ -88,6 +88,9 @@ const CharactersPage: React.FC<CharactersPageProps> = ({ playerId: playerIdProp 
   // When arriving from adventure, these params are set
   const groupId = searchParams.get('groupId');
   const charIdParam = searchParams.get('charId');
+
+  // Adventure mode: viewing a character sheet from the map (no character selection grid)
+  const isAdventureMode = !!groupId || (!!charIdParam && !playerIdProp);
   const [characters, setCharacters] = useState<Character[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
   const [races, setRaces] = useState<Race[]>([]);
@@ -145,7 +148,7 @@ const CharactersPage: React.FC<CharactersPageProps> = ({ playerId: playerIdProp 
   useEffect(() => {
     if (!groupId) { setMapType(null); return; }
     groupsApi.getById(Number(groupId)).then(g => {
-      setMapType(g.map?.type ?? null);
+      setMapType(g.leader?.map?.type ?? null);
     }).catch(() => setMapType(null));
   }, [groupId]);
 
@@ -301,26 +304,47 @@ const CharactersPage: React.FC<CharactersPageProps> = ({ playerId: playerIdProp 
               ← Retour à l'aventure
             </button>
           )}
-          {!groupId && (
+          {!groupId && charIdParam && isAdventureMode && (
+            <button
+              className="btn btn-secondary"
+              onClick={() => navigate(`/game/adventure?charId=${charIdParam}`)}
+            >
+              ← Retour à l'aventure
+            </button>
+          )}
+          {!isAdventureMode && (
             <button className="btn btn-primary" onClick={() => setShowCreate(true)}>+ Creer</button>
           )}
         </div>
       </div>
-      <div className="card-grid">
-        {characters.map(c => (
-          <div key={c.id} className={`card ${selected?.id === c.id ? 'selected' : ''}`}
-            onClick={() => selectChar(c.id)}>
-            <h4>{c.nom}</h4>
-            <div className="meta">Niv. {c.niveau} - {c.race?.nom} - Joueur #{c.joueurId}</div>
-          </div>
-        ))}
-      </div>
+      {!isAdventureMode && (
+        <div className="card-grid">
+          {characters.map(c => (
+            <div key={c.id} className={`card ${selected?.id === c.id ? 'selected' : ''}`}
+              onClick={() => selectChar(c.id)}>
+              <h4>{c.nom}</h4>
+              <div className="meta">Niv. {c.niveau} - {c.race?.nom} - Joueur #{c.joueurId}</div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {selected && (
         <div className="char-detail">
-          <h2>{selected.nom} - Niveau {selected.niveau}</h2>
-          <p className="char-meta">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+            <h2 style={{ margin: 0 }}>{selected.nom} - Niveau {selected.niveau}</h2>
+            {!isAdventureMode && (
+              <button
+                className="btn btn-success"
+                onClick={() => navigate(`/game/adventure?charId=${selected.id}`)}
+              >
+                Partir a l'aventure
+              </button>
+            )}
+          </div>
+          <p className="char-meta" style={{ marginTop: 6 }}>
             Race: {selected.race?.nom} | XP: {selected.experience} / {selected.niveau * selected.niveau * 50} | Points disponibles: {selected.pointsStatsDisponibles}
+            {selected.mapId ? ` | Map: ${selected.map?.nom ?? `#${selected.mapId}`} (${selected.positionX}, ${selected.positionY})` : ' | Hors map'}
           </p>
 
           {/* Stats Section */}
