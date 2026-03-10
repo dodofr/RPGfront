@@ -1,25 +1,26 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { mapsApi } from '../../api/maps';
-import type { MapConnection } from '../../types';
-
-const GRID_WIDTH = 16;
-const GRID_HEIGHT = 18;
+import { mapsApi, uploadApi } from '../../api/maps';
+import type { GameMap, MapConnection } from '../../types';
 
 type CellData =
   | { type: 'spawn-player'; ordre: number }
   | { type: 'spawn-enemy'; ordre: number }
   | { type: 'obstacle-pm' }
   | { type: 'obstacle-los' }
-  | { type: 'excluded' };
+  | { type: 'excluded' }
+  | { type: 'premier-plan' };
 
-type Tool = 'spawn-player' | 'spawn-enemy' | 'obstacle-pm' | 'obstacle-los' | 'excluded' | 'portal' | 'eraser';
+type ExitDir = 'nord' | 'sud' | 'est' | 'ouest';
+
+type Tool = 'spawn-player' | 'spawn-enemy' | 'obstacle-pm' | 'obstacle-los' | 'excluded' | 'premier-plan' | 'portal' | 'exit-nord' | 'exit-sud' | 'exit-est' | 'exit-ouest' | 'eraser';
 
 type PortalData = { nom: string };
 
 const GridEditorPage: React.FC = () => {
   const { mapId } = useParams<{ mapId: string }>();
   const navigate = useNavigate();
+  const [mapInfo, setMapInfo] = useState<GameMap | null>(null);
   const [cells, setCells] = useState<Map<string, CellData>>(new Map());
   const [portals, setPortals] = useState<Map<string, PortalData>>(new Map());
   const [originalConnections, setOriginalConnections] = useState<MapConnection[]>([]);
@@ -29,6 +30,17 @@ const GridEditorPage: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  // Exit positions: { nord: {x,y}|null, ... }
+  const [exits, setExits] = useState<Record<ExitDir, { x: number; y: number } | null>>({
+    nord: null, sud: null, est: null, ouest: null,
+  });
+  // Image URL
+  const [imageUrl, setImageUrl] = useState('');
+
+  const gridWidth = mapInfo?.largeur ?? 20;
+  const gridHeight = mapInfo?.hauteur ?? 14;
 
   useEffect(() => {
     if (!mapId) return;
@@ -36,11 +48,22 @@ const GridEditorPage: React.FC = () => {
     Promise.all([
       mapsApi.getGrid(Number(mapId)),
       mapsApi.getById(Number(mapId)),
-    ]).then(([grid, mapInfo]) => {
+    ]).then(([grid, info]) => {
+      setMapInfo(info);
+      setImageUrl(info.imageUrl ?? '');
+      // Load exits
+      setExits({
+        nord: info.nordExitX !== null && info.nordExitY !== null ? { x: info.nordExitX, y: info.nordExitY } : null,
+        sud: info.sudExitX !== null && info.sudExitY !== null ? { x: info.sudExitX, y: info.sudExitY } : null,
+        est: info.estExitX !== null && info.estExitY !== null ? { x: info.estExitX, y: info.estExitY } : null,
+        ouest: info.ouestExitX !== null && info.ouestExitY !== null ? { x: info.ouestExitX, y: info.ouestExitY } : null,
+      });
       const initial = new Map<string, CellData>();
       if (grid.cases) {
         for (const c of grid.cases) {
-          if (c.estExclue) {
+          if (c.estPremierPlan) {
+            initial.set(`${c.x},${c.y}`, { type: 'premier-plan' });
+          } else if (c.estExclue) {
             initial.set(`${c.x},${c.y}`, { type: 'excluded' });
           } else if (c.bloqueLigneDeVue) {
             initial.set(`${c.x},${c.y}`, { type: 'obstacle-los' });
@@ -59,14 +82,11 @@ const GridEditorPage: React.FC = () => {
       }
       setCells(initial);
 
-      // Charger les portails existants (hors donjons)
-      const nonDungeonConns = (mapInfo.connectionsFrom ?? []).filter(c => !c.donjonId);
+      const nonDungeonConns = (info.connectionsFrom ?? []).filter(c => !c.donjonId);
       setOriginalConnections(nonDungeonConns);
       const initialPortals = new Map<string, PortalData>();
       for (const conn of nonDungeonConns) {
-        initialPortals.set(`${conn.positionX},${conn.positionY}`, {
-          nom: conn.nom,
-        });
+        initialPortals.set(`${conn.positionX},${conn.positionY}`, { nom: conn.nom });
       }
       setPortals(initialPortals);
 
@@ -85,15 +105,20 @@ const GridEditorPage: React.FC = () => {
   const applyTool = useCallback((x: number, y: number) => {
     const key = `${x},${y}`;
 
+    // Exit tools: set the exit position for the direction
+    if (tool === 'exit-nord' || tool === 'exit-sud' || tool === 'exit-est' || tool === 'exit-ouest') {
+      const dir = tool.replace('exit-', '') as ExitDir;
+      setExits(prev => ({ ...prev, [dir]: { x, y } }));
+      return;
+    }
+
     if (tool === 'eraser') {
-      // Supprimer des portails si présent
       setPortals(prev => {
         if (!prev.has(key)) return prev;
         const next = new Map(prev);
         next.delete(key);
         return next;
       });
-      // Supprimer des cases + renuméroter spawns
       setCells(prev => {
         const next = new Map(prev);
         const deleted = next.get(key);
@@ -127,22 +152,25 @@ const GridEditorPage: React.FC = () => {
     setCells(prev => {
       const next = new Map(prev);
 
-      // Don't overwrite existing cell when dragging
-      if (prev.has(key)) return prev;
-
       if (tool === 'spawn-player' || tool === 'spawn-enemy') {
         let count = 0;
         for (const v of prev.values()) {
           if (v.type === tool) count++;
         }
+        // Ne pas compter si la case est déjà un spawn du même type
+        if (prev.get(key)?.type === tool) return prev;
         if (count >= 8) return prev;
         next.set(key, { type: tool, ordre: count + 1 });
+      } else if (prev.has(key)) {
+        return prev;
       } else if (tool === 'obstacle-pm') {
         next.set(key, { type: 'obstacle-pm' });
       } else if (tool === 'obstacle-los') {
         next.set(key, { type: 'obstacle-los' });
       } else if (tool === 'excluded') {
         next.set(key, { type: 'excluded' });
+      } else if (tool === 'premier-plan') {
+        next.set(key, { type: 'premier-plan' });
       }
 
       return next;
@@ -168,14 +196,30 @@ const GridEditorPage: React.FC = () => {
 
   const playerCount = countSpawns('spawn-player');
   const enemyCount = countSpawns('spawn-enemy');
-  const canSave = playerCount === 8 && enemyCount === 8;
+  const spawnGridComplete = playerCount === 8 && enemyCount === 8;
+
+  const handleUploadImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setError('');
+    try {
+      const { url } = await uploadApi.mapImage(file);
+      setImageUrl(url);
+    } catch (err: any) {
+      setError(err?.response?.data?.error || 'Erreur lors de l\'upload');
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
 
   const handleSave = async () => {
-    if (!mapId || !canSave) return;
+    if (!mapId) return;
     setSaving(true);
     setError('');
     try {
-      const obstacles: { x: number; y: number; bloqueDeplacement: boolean; bloqueLigneDeVue: boolean; estExclue: boolean }[] = [];
+      const obstacles: { x: number; y: number; bloqueDeplacement: boolean; bloqueLigneDeVue: boolean; estExclue: boolean; estPremierPlan: boolean }[] = [];
       const spawns: { x: number; y: number; equipe: number; ordre: number }[] = [];
 
       for (const [key, data] of cells.entries()) {
@@ -184,11 +228,13 @@ const GridEditorPage: React.FC = () => {
         const y = Number(yStr);
 
         if (data.type === 'obstacle-pm') {
-          obstacles.push({ x, y, bloqueDeplacement: true, bloqueLigneDeVue: false, estExclue: false });
+          obstacles.push({ x, y, bloqueDeplacement: true, bloqueLigneDeVue: false, estExclue: false, estPremierPlan: false });
         } else if (data.type === 'obstacle-los') {
-          obstacles.push({ x, y, bloqueDeplacement: true, bloqueLigneDeVue: true, estExclue: false });
+          obstacles.push({ x, y, bloqueDeplacement: true, bloqueLigneDeVue: true, estExclue: false, estPremierPlan: false });
         } else if (data.type === 'excluded') {
-          obstacles.push({ x, y, bloqueDeplacement: true, bloqueLigneDeVue: true, estExclue: true });
+          obstacles.push({ x, y, bloqueDeplacement: true, bloqueLigneDeVue: true, estExclue: true, estPremierPlan: false });
+        } else if (data.type === 'premier-plan') {
+          obstacles.push({ x, y, bloqueDeplacement: false, bloqueLigneDeVue: false, estExclue: false, estPremierPlan: true });
         } else if (data.type === 'spawn-player') {
           spawns.push({ x, y, equipe: 0, ordre: data.ordre });
         } else if (data.type === 'spawn-enemy') {
@@ -196,10 +242,14 @@ const GridEditorPage: React.FC = () => {
         }
       }
 
+      // Cases (obstacles + premier-plan) : toujours sauvegardées
       await mapsApi.setCases(Number(mapId), obstacles);
-      await mapsApi.setSpawns(Number(mapId), spawns);
+      // Spawns : seulement si la grille est complète (8+8)
+      if (spawnGridComplete) {
+        await mapsApi.setSpawns(Number(mapId), spawns);
+      }
 
-      // Sauvegarder les portails : supprimer les anciennes connexions non-donjon, créer les nouvelles
+      // Save portals
       await Promise.all(originalConnections.map(conn => mapsApi.removeConnection(Number(mapId), conn.id)));
       await Promise.all([...portals.entries()].map(([key, data]) => {
         const [xStr, yStr] = key.split(',');
@@ -210,6 +260,19 @@ const GridEditorPage: React.FC = () => {
           nom: data.nom,
         });
       }));
+
+      // Save exits + imageUrl
+      await mapsApi.update(Number(mapId), {
+        imageUrl: imageUrl.trim() || null,
+        nordExitX: exits.nord?.x ?? null,
+        nordExitY: exits.nord?.y ?? null,
+        sudExitX: exits.sud?.x ?? null,
+        sudExitY: exits.sud?.y ?? null,
+        estExitX: exits.est?.x ?? null,
+        estExitY: exits.est?.y ?? null,
+        ouestExitX: exits.ouest?.x ?? null,
+        ouestExitY: exits.ouest?.y ?? null,
+      } as any);
 
       navigate('/admin/monde');
     } catch (e: any) {
@@ -227,6 +290,7 @@ const GridEditorPage: React.FC = () => {
       case 'obstacle-pm': return 'obstacle-cell';
       case 'obstacle-los': return 'obstacle-cell obstacle-los';
       case 'excluded': return 'excluded-cell';
+      case 'premier-plan': return 'premier-plan-edit';
       default: return '';
     }
   };
@@ -235,7 +299,16 @@ const GridEditorPage: React.FC = () => {
     if (!cell) return '';
     if (cell.type === 'spawn-player' || cell.type === 'spawn-enemy') return String(cell.ordre);
     if (cell.type === 'obstacle-los') return 'LDV';
+    if (cell.type === 'premier-plan') return 'PP';
     return '';
+  };
+
+  const getExitLabel = (x: number, y: number) => {
+    if (exits.nord?.x === x && exits.nord?.y === y) return '↑N';
+    if (exits.sud?.x === x && exits.sud?.y === y) return '↓S';
+    if (exits.est?.x === x && exits.est?.y === y) return '→E';
+    if (exits.ouest?.x === x && exits.ouest?.y === y) return '←O';
+    return null;
   };
 
   if (loading) return <div className="admin-page"><p>Chargement...</p></div>;
@@ -246,7 +319,12 @@ const GridEditorPage: React.FC = () => {
     { key: 'obstacle-pm', label: 'Obstacle PM' },
     { key: 'obstacle-los', label: 'Obstacle LDV' },
     { key: 'excluded', label: 'Zone exclue' },
+    { key: 'premier-plan', label: 'Premier-plan' },
     { key: 'portal', label: `Portail${portals.size > 0 ? ` (${portals.size})` : ''}` },
+    ...(mapInfo?.nordMapId ? [{ key: 'exit-nord' as Tool, label: `Sortie N${exits.nord ? ` (${exits.nord.x},${exits.nord.y})` : ''}` }] : []),
+    ...(mapInfo?.sudMapId ? [{ key: 'exit-sud' as Tool, label: `Sortie S${exits.sud ? ` (${exits.sud.x},${exits.sud.y})` : ''}` }] : []),
+    ...(mapInfo?.estMapId ? [{ key: 'exit-est' as Tool, label: `Sortie E${exits.est ? ` (${exits.est.x},${exits.est.y})` : ''}` }] : []),
+    ...(mapInfo?.ouestMapId ? [{ key: 'exit-ouest' as Tool, label: `Sortie O${exits.ouest ? ` (${exits.ouest.x},${exits.ouest.y})` : ''}` }] : []),
     { key: 'eraser', label: 'Gomme' },
   ];
 
@@ -254,12 +332,41 @@ const GridEditorPage: React.FC = () => {
     <div className="admin-page">
       <div className="save-bar">
         <button className="btn" onClick={() => navigate('/admin/monde')}>← Retour</button>
-        <span className="save-bar-title">Grille de combat — Map #{mapId} ({GRID_WIDTH}×{GRID_HEIGHT})</span>
-        <button className="btn btn-primary" onClick={handleSave} disabled={!canSave || saving}>
+        <span className="save-bar-title">Grille de combat — Map #{mapId} ({gridWidth}×{gridHeight})</span>
+        <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
           {saving ? 'Sauvegarde...' : 'Sauvegarder'}
         </button>
       </div>
       {error && <p style={{ color: 'var(--danger)', marginTop: 8 }}>{error}</p>}
+
+      <div style={{ padding: '8px 0', display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+        <label>Image de fond :</label>
+        <input
+          style={{ flex: 1, maxWidth: 340 }}
+          value={imageUrl}
+          onChange={e => setImageUrl(e.target.value)}
+          placeholder="URL de l'image (ex: /assets/maps/foret.jpg)"
+        />
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/gif"
+          style={{ display: 'none' }}
+          onChange={handleUploadImage}
+        />
+        <button
+          className="btn btn-sm"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploading}
+          title="Importer une image depuis votre ordinateur"
+        >
+          {uploading ? 'Upload...' : '📁 Importer'}
+        </button>
+        {imageUrl && (
+          <img src={imageUrl} alt="preview" style={{ height: 32, borderRadius: 3, border: '1px solid var(--border)' }} />
+        )}
+      </div>
+
       <div className="grid-editor">
         <div className="toolbar">
           {tools.map(t => (
@@ -289,18 +396,28 @@ const GridEditorPage: React.FC = () => {
           </div>
         )}
 
+        {(tool === 'exit-nord' || tool === 'exit-sud' || tool === 'exit-est' || tool === 'exit-ouest') && (
+          <div className="portal-config">
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+              Cliquez sur la case qui servira de sortie directionnelle pour "{tool.replace('exit-', '').toUpperCase()}".
+            </span>
+          </div>
+        )}
+
         <div
           className="grid-canvas"
-          style={{ gridTemplateColumns: `repeat(${GRID_WIDTH}, 32px)` }}
+          style={{ gridTemplateColumns: `repeat(${gridWidth}, 32px)` }}
           onMouseLeave={() => setPainting(false)}
         >
-          {Array.from({ length: GRID_HEIGHT }).map((_, y) =>
-            Array.from({ length: GRID_WIDTH }).map((_, x) => {
+          {Array.from({ length: gridHeight }).map((_, y) =>
+            Array.from({ length: gridWidth }).map((_, x) => {
               const key = `${x},${y}`;
               const cell = cells.get(key);
               const portal = portals.get(key);
+              const exitLabel = getExitLabel(x, y);
               let className = `grid-cell ${getCellClass(cell)}`;
               if (portal) className += ' portal-cell';
+              if (exitLabel) className += ' exit-cell';
               return (
                 <div
                   key={key}
@@ -308,9 +425,9 @@ const GridEditorPage: React.FC = () => {
                   onMouseDown={(e) => { e.preventDefault(); handleMouseDown(x, y); }}
                   onMouseEnter={() => handleMouseEnter(x, y)}
                   onMouseUp={handleMouseUp}
-                  title={portal ? `Portail réseau : ${portal.nom}` : undefined}
+                  title={portal ? `Portail réseau : ${portal.nom}` : exitLabel ? `Sortie ${exitLabel}` : undefined}
                 >
-                  {portal ? '\uD83D\uDEAA' : getCellLabel(cell)}
+                  {exitLabel ?? (portal ? '\uD83D\uDEAA' : getCellLabel(cell))}
                 </div>
               );
             })

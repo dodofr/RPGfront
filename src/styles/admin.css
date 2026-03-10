@@ -1122,3 +1122,18 @@
   color: var(--text);
   white-space: nowrap;
 }
+
+.grid-editor .grid-cell.premier-plan-edit {
+  background: rgba(80, 50, 20, 0.8);
+  color: #f5deb3;
+  font-size: 8px;
+  font-weight: bold;
+}
+
+.grid-editor .grid-cell.exit-cell {
+  background: #1a3a5c;
+  color: #64b5f6;
+  font-size: 9px;
+  font-weight: bold;
+  border: 1px solid #1976d2;
+}

@@ -146,6 +146,10 @@ const CombatPage: React.FC = () => {
   const lastLogIdRef = useRef<number>(0);
   const gridContainerRef = useRef<HTMLDivElement>(null);
   const [gridPixelSize, setGridPixelSize] = useState<{ w: number; h: number } | null>(null);
+  const [floatingTexts, setFloatingTexts] = useState<{ id: number; entityId: number; gx: number; gy: number; value: number; isCrit: boolean; isHeal: boolean }[]>([]);
+  const [tacticalMode, setTacticalMode] = useState(false);
+  const prevHpMapRef = useRef<Map<number, number>>(new Map());
+  const floatingIdRef = useRef(0);
 
   const combatId = id ? parseInt(id) : null;
 
@@ -163,6 +167,34 @@ const CombatPage: React.FC = () => {
     if (!combatId) return;
     try {
       const data = await combatApi.getById(combatId);
+      // Detect HP changes for floating damage numbers
+      const newFloating: typeof floatingTexts = [];
+      for (const entity of data.entites) {
+        const prevHp = prevHpMapRef.current.get(entity.id);
+        if (prevHp !== undefined && prevHp !== entity.pvActuels) {
+          const diff = entity.pvActuels - prevHp;
+          const isHeal = diff > 0;
+          // Detect crit from recent logs
+          const isCrit = !isHeal && data.logs.some(l =>
+            l.id > lastLogIdRef.current && l.message.toLowerCase().includes('critique')
+          );
+          newFloating.push({
+            id: ++floatingIdRef.current,
+            entityId: entity.id,
+            gx: entity.position.x,
+            gy: entity.position.y,
+            value: Math.abs(diff),
+            isCrit,
+            isHeal,
+          });
+        }
+        prevHpMapRef.current.set(entity.id, entity.pvActuels);
+      }
+      if (newFloating.length > 0) {
+        setFloatingTexts(prev => [...prev, ...newFloating]);
+        const ids = newFloating.map(f => f.id);
+        setTimeout(() => setFloatingTexts(prev => prev.filter(f => !ids.includes(f.id))), 1200);
+      }
       setCombat(data);
       if (data.logs) {
         const newLogs = data.logs.filter(l => l.id > lastLogIdRef.current);
@@ -681,8 +713,18 @@ const CombatPage: React.FC = () => {
         <div>
           {currentEntity && <span>Au tour de: <strong>{currentEntity.nom}</strong></span>}
         </div>
-        <div className={`status ${combat.status.toLowerCase().replace('_', '-')}`}>
-          {combat.status}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button
+            className={`btn btn-sm ${tacticalMode ? 'btn-warning' : ''}`}
+            onClick={() => setTacticalMode(v => !v)}
+            title="Mode tactique : damier sans image de fond"
+            style={{ fontSize: 12, padding: '2px 8px' }}
+          >
+            {tacticalMode ? '🗺 Carte' : '⊞ Tactique'}
+          </button>
+          <div className={`status ${combat.status.toLowerCase().replace('_', '-')}`}>
+            {combat.status}
+          </div>
         </div>
       </div>
 
@@ -744,12 +786,16 @@ const CombatPage: React.FC = () => {
 
         {/* Grid */}
         <div className="grid-container" ref={gridContainerRef}>
-          <div className="combat-grid" style={{
+          <div className={`combat-grid${tacticalMode ? ' tactical-mode' : ''}`} style={{
             gridTemplateColumns: `repeat(${combat.grille.largeur}, 1fr)`,
             gridTemplateRows: `repeat(${combat.grille.hauteur}, 1fr)`,
             ...(gridPixelSize
               ? { width: gridPixelSize.w, height: gridPixelSize.h }
               : { width: '100%', aspectRatio: `${combat.grille.largeur} / ${combat.grille.hauteur}` }),
+            ...(!tacticalMode && combat.mapImageUrl
+              ? { backgroundImage: `url(${combat.mapImageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+              : {}),
+            position: 'relative',
           }}>
             {Array.from({ length: combat.grille.hauteur }, (_, y) =>
               Array.from({ length: combat.grille.largeur }, (_, x) => {
@@ -798,6 +844,7 @@ const CombatPage: React.FC = () => {
 
                 return (
                   <div key={cellKey} className={cellClass}
+                    style={tacticalMode && !obstacle ? { background: (x + y) % 2 === 0 ? '#383838' : '#2a2a2a' } : undefined}
                     onClick={() => handleCellClick(x, y)}
                     onMouseEnter={() => setHoveredCell({ x, y })}
                     onMouseLeave={() => setHoveredCell(null)}>
@@ -885,6 +932,32 @@ const CombatPage: React.FC = () => {
                 );
               })
             )}
+            {/* Premier-plan overlay */}
+            {(combat.mapPremierPlan ?? []).map((c, i) => (
+              <div
+                key={`pp-${i}`}
+                className="premier-plan-cell"
+                style={{ gridColumn: c.x + 1, gridRow: c.y + 1, pointerEvents: 'none', zIndex: 3 }}
+              />
+            ))}
+            {/* Floating damage numbers — position absolute pour ne pas impacter la grille */}
+            {floatingTexts.map(ft => (
+              <div
+                key={ft.id}
+                className={`floating-damage${ft.isCrit ? ' float-crit' : ft.isHeal ? ' float-heal' : ''}`}
+                style={{
+                  position: 'absolute',
+                  left: `${(ft.gx / combat.grille.largeur) * 100}%`,
+                  top: `${(ft.gy / combat.grille.hauteur) * 100}%`,
+                  width: `${(1 / combat.grille.largeur) * 100}%`,
+                  height: `${(1 / combat.grille.hauteur) * 100}%`,
+                  pointerEvents: 'none',
+                  zIndex: 10,
+                }}
+              >
+                {ft.isHeal ? '+' : '-'}{ft.value}{ft.isCrit ? '!' : ''}
+              </div>
+            ))}
           </div>
         </div>
 

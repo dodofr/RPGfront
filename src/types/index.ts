@@ -202,6 +202,7 @@ export interface MapCase {
   bloqueDeplacement: boolean;
   bloqueLigneDeVue: boolean;
   estExclue: boolean;
+  estPremierPlan: boolean;
 }
 
 export interface MapSpawn {
@@ -228,6 +229,15 @@ export interface GameMap {
   ouestMapId: number | null;
   worldX: number | null;
   worldY: number | null;
+  imageUrl: string | null;
+  nordExitX: number | null;
+  nordExitY: number | null;
+  sudExitX: number | null;
+  sudExitY: number | null;
+  estExitX: number | null;
+  estExitY: number | null;
+  ouestExitX: number | null;
+  ouestExitY: number | null;
   groupesEnnemis?: GroupeEnnemi[];
   connectionsFrom?: MapConnection[];
   cases?: MapCase[];
@@ -452,6 +462,9 @@ export interface CombatState {
   entiteActuelle: number;
   groupeId: number | null;
   personnageId: number | null;
+  mapId: number | null;
+  mapImageUrl: string | null;
+  mapPremierPlan: { x: number; y: number }[];
   grille: { largeur: number; hauteur: number };
   entites: CombatEntity[];
   cases: CombatCase[];

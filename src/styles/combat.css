@@ -120,7 +120,7 @@
 .combat-cell {
   min-width: 0;
   min-height: 0;
-  background: var(--bg);
+  background: transparent;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -130,31 +130,44 @@
   transition: background 0.1s;
   user-select: none;
   overflow: visible;
-  border-right: 1px solid rgba(255,255,255,0.05);
-  border-bottom: 1px solid rgba(255,255,255,0.05);
+  border-right: 1px solid rgba(255,255,255,0.07);
+  border-bottom: 1px solid rgba(255,255,255,0.07);
 }
 
-.combat-cell:hover { background: rgba(255,255,255,0.08); }
+/* Sans image de fond : cases vides ont un fond sombre */
+.combat-grid:not([style*="background-image"]):not(.tactical-mode) .combat-cell {
+  background: var(--bg);
+}
+
+/* Mode tactique : damier géré par inline style, fond grid neutre */
+.combat-grid.tactical-mode {
+  background: #2a2a2a;
+}
+
+.combat-cell:hover { background: rgba(255,255,255,0.1); }
 
 .combat-cell.obstacle {
-  background: repeating-linear-gradient(
+  background: rgba(0, 0, 0, 0.65) !important;
+  background-image: repeating-linear-gradient(
     45deg,
-    #1c1c1c, #1c1c1c 3px,
-    #2e2e2e 3px, #2e2e2e 7px
+    rgba(255,255,255,0.04),
+    rgba(255,255,255,0.04) 3px,
+    transparent 3px,
+    transparent 7px
   ) !important;
-  border-color: #3a3a3a !important;
+  border-color: rgba(255,255,255,0.1) !important;
   cursor: not-allowed;
 }
 
 .combat-cell.obstacle-los {
-  background: #0d0d0d !important;
-  border-color: #1a1a1a !important;
+  background: rgba(0, 0, 0, 0.88) !important;
+  border-color: rgba(0,0,0,0.5) !important;
   cursor: not-allowed;
 }
 
-.combat-cell.player-cell { background: rgba(33, 150, 243, 0.3); border: 1px solid var(--info); }
-.combat-cell.enemy-cell { background: rgba(233, 69, 96, 0.3); border: 1px solid var(--danger); }
-.combat-cell.invocation-cell { background: rgba(156, 39, 176, 0.3); border: 1px solid #9c27b0; }
+.combat-cell.player-cell { background: rgba(33, 150, 243, 0.5); border: 1px solid var(--info); }
+.combat-cell.enemy-cell { background: rgba(233, 69, 96, 0.5); border: 1px solid var(--danger); }
+.combat-cell.invocation-cell { background: rgba(156, 39, 176, 0.5); border: 1px solid #9c27b0; }
 .combat-cell.current-turn { box-shadow: 0 0 0 2px var(--warning); z-index: 1; }
 .combat-cell.selected-cell { box-shadow: 0 0 0 2px white; z-index: 2; }
 .combat-cell.target-mode { cursor: crosshair; }
@@ -637,8 +650,8 @@
 
 /* ======= Preview Highlights ======= */
 
-.combat-cell.move-range { background: rgba(76, 175, 80, 0.2); cursor: crosshair; }
-.combat-cell.move-range:hover { background: rgba(76, 175, 80, 0.4); }
+.combat-cell.move-range { background: rgba(76, 175, 80, 0.2) !important; cursor: crosshair; }
+.combat-cell.move-range:hover { background: rgba(76, 175, 80, 0.4) !important; }
 
 .combat-cell.move-range.cell-path {
   background: rgba(76, 175, 80, 0.4) !important;
@@ -646,11 +659,11 @@
   outline-offset: -2px;
 }
 
-.combat-cell.spell-range { background: rgba(255, 152, 0, 0.15); cursor: crosshair; }
-.combat-cell.spell-range:hover { background: rgba(255, 152, 0, 0.3); }
+.combat-cell.spell-range { background: rgba(255, 152, 0, 0.15) !important; cursor: crosshair; }
+.combat-cell.spell-range:hover { background: rgba(255, 152, 0, 0.3) !important; }
 
 .combat-cell.spell-range-blocked {
-  background: rgba(255, 152, 0, 0.05);
+  background: rgba(255, 152, 0, 0.05) !important;
   cursor: not-allowed;
 }
 
@@ -812,3 +825,40 @@
 }
 
 .bouclier-badge { font-size: 10px; color: #4a90d9; }
+
+/* Premier-plan overlay cell (CombatPage) */
+.premier-plan-cell {
+  background: rgba(30, 20, 10, 0.75);
+  border: 1px solid rgba(0,0,0,0.3);
+  position: relative;
+}
+
+/* Floating damage numbers */
+@keyframes floatUp {
+  0%   { opacity: 1; transform: translateY(0) scale(1); }
+  70%  { opacity: 1; transform: translateY(-14px) scale(1.1); }
+  100% { opacity: 0; transform: translateY(-24px) scale(0.9); }
+}
+
+.floating-damage {
+  position: absolute;
+  pointer-events: none;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 900;
+  color: #ff4444;
+  text-shadow: 0 0 4px rgba(0,0,0,0.9), 1px 1px 2px #000;
+  animation: floatUp 1.2s ease-out forwards;
+}
+
+.floating-damage.float-heal {
+  color: #4caf50;
+}
+
+.floating-damage.float-crit {
+  color: #ff9800;
+  font-size: 17px;
+}

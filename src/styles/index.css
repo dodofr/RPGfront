@@ -641,7 +641,7 @@ body {
 .adventure-cell {
   min-width: 0;
   min-height: 0;
-  background: var(--bg);
+  background: transparent;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -650,8 +650,13 @@ body {
   position: relative;
   font-size: 12px;
   overflow: visible;
-  border-right: 1px solid rgba(255,255,255,0.05);
-  border-bottom: 1px solid rgba(255,255,255,0.05);
+  border-right: 1px solid rgba(255,255,255,0.07);
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+}
+
+/* Sans image de fond : cases vides ont un fond sombre */
+.adventure-grid:not([style*="background-image"]) .adventure-cell {
+  background: var(--bg);
 }
 
 .adventure-cell:hover {
@@ -659,28 +664,29 @@ body {
 }
 
 /* Cell types */
-/* Obstacle PM uniquement : rayures fines (on voit à travers, on ne peut pas passer) */
+/* Obstacle PM : overlay sombre semi-opaque sur l'image de fond */
 .cell-obstacle {
-  background: repeating-linear-gradient(
+  background: rgba(0, 0, 0, 0.65) !important;
+  background-image: repeating-linear-gradient(
     45deg,
-    #1c1c1c,
-    #1c1c1c 3px,
-    #2e2e2e 3px,
-    #2e2e2e 7px
+    rgba(255,255,255,0.04),
+    rgba(255,255,255,0.04) 3px,
+    transparent 3px,
+    transparent 7px
   ) !important;
-  border: 1px solid #3a3a3a !important;
+  border: 1px solid rgba(255,255,255,0.1) !important;
   cursor: not-allowed;
 }
 
-/* Obstacle LDV + PM : mur plein, rien ne passe */
+/* Obstacle LDV + PM : mur plein */
 .cell-obstacle-los {
-  background: #0d0d0d !important;
-  border: 1px solid #1a1a1a !important;
+  background: rgba(0, 0, 0, 0.88) !important;
+  border: 1px solid rgba(0,0,0,0.5) !important;
   cursor: not-allowed;
 }
 
 .cell-player {
-  background: rgba(76, 175, 80, 0.25) !important;
+  background: rgba(76, 175, 80, 0.45) !important;
   border: 1px solid var(--success) !important;
 }
 
@@ -691,7 +697,7 @@ body {
 }
 
 .cell-enemy {
-  background: rgba(233, 69, 96, 0.2) !important;
+  background: rgba(233, 69, 96, 0.45) !important;
   border: 1px solid var(--danger) !important;
 }
 
@@ -702,7 +708,7 @@ body {
 }
 
 .cell-ally {
-  background: rgba(21, 101, 192, 0.35) !important;
+  background: rgba(21, 101, 192, 0.55) !important;
   border: 1px solid #1565c0 !important;
 }
 
@@ -847,4 +853,20 @@ body {
   font-weight: 700;
   color: var(--success);
   margin-top: 2px;
+}
+
+/* Premier-plan overlay cell (MapPage) */
+.premier-plan-cell {
+  background: rgba(30, 20, 10, 0.75);
+  border: 1px solid rgba(0,0,0,0.3);
+  position: relative;
+}
+
+/* Exit arrow cells */
+.cell-edge {
+  position: relative;
+}
+.cell-edge-arrow {
+  font-size: 14px;
+  opacity: 0.8;
 }

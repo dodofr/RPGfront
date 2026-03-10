@@ -6,6 +6,7 @@ import { pnjApi } from '../../api/pnj';
 import { charactersApi } from '../../api/characters';
 import { playersApi } from '../../api/players';
 import { queteApi } from '../../api/quetes';
+import { donjonsApi } from '../../api/donjons';
 import type { Group, GameMap, Direction, MapConnection, MapCase, PNJ, Character, InventoryState, InteractResponse, AdvanceQuestResponse, PnjStatusEntry } from '../../types';
 import '../../styles/index.css';
 
@@ -102,6 +103,10 @@ const MapPage: React.FC = () => {
   const [gridPixelSize, setGridPixelSize] = useState<{ w: number; h: number } | null>(null);
   const gridContainerRef = useRef<HTMLDivElement>(null);
   const [selectedCell, setSelectedCell] = useState<{ x: number; y: number } | null>(null);
+
+  // Active dungeon run (solo)
+  const [isInDungeon, setIsInDungeon] = useState(false);
+  const [dungeonSalleActuelle, setDungeonSalleActuelle] = useState<number | null>(null);
 
   // Dungeon portal modal state
   const [dungeonModal, setDungeonModal] = useState<{ connection: MapConnection } | null>(null);
@@ -214,6 +219,15 @@ const MapPage: React.FC = () => {
       return;
     }
     setCharacter(c);
+    // Check active dungeon run for solo character
+    try {
+      const runState = await donjonsApi.getRunStateSolo(cId);
+      setIsInDungeon(!!runState?.run && !runState.run.termine);
+      setDungeonSalleActuelle(runState?.run?.salleActuelle ?? null);
+    } catch {
+      setIsInDungeon(false);
+      setDungeonSalleActuelle(null);
+    }
     if (c.mapId) {
       const [map, grid, pnjs, playerChars] = await Promise.all([
         mapsApi.getById(c.mapId),
@@ -334,17 +348,10 @@ const MapPage: React.FC = () => {
       return;
     }
 
-    const isNord = y === 0 && mapData.nordMapId;
-    const isSud = y === mapData.hauteur - 1 && mapData.sudMapId;
-    const isOuest = x === 0 && mapData.ouestMapId;
-    const isEst = x === mapData.largeur - 1 && mapData.estMapId;
+    const edgeDir = isEdge(x, y);
 
-    if (isNord || isSud || isOuest || isEst) {
-      let dir: Direction;
-      if (isNord) dir = 'NORD';
-      else if (isSud) dir = 'SUD';
-      else if (isOuest) dir = 'OUEST';
-      else dir = 'EST';
+    if (edgeDir) {
+      const dir: Direction = edgeDir;
 
       setMoving(true);
       try {
@@ -438,6 +445,20 @@ const MapPage: React.FC = () => {
       } else if (group) {
         await groupsApi.leaveMap(group.id);
       }
+      await reload();
+    } catch (err: unknown) {
+      const msg = (err as any)?.response?.data?.error || (err instanceof Error ? err.message : 'Erreur');
+      alert(msg);
+    }
+  };
+
+  const handleAbandonDungeon = async () => {
+    if (!character) return;
+    if (!window.confirm('Abandonner le donjon ? Vous retournerez à votre point de départ.')) return;
+    try {
+      await donjonsApi.abandonRunSolo(character.id);
+      setIsInDungeon(false);
+      setDungeonSalleActuelle(null);
       await reload();
     } catch (err: unknown) {
       const msg = (err as any)?.response?.data?.error || (err instanceof Error ? err.message : 'Erreur');
@@ -606,10 +627,10 @@ const MapPage: React.FC = () => {
     enemies.find(ge => ge.positionX === x && ge.positionY === y);
 
   const isEdge = (x: number, y: number) => {
-    if (y === 0 && mapData.nordMapId) return 'NORD';
-    if (y === mapData.hauteur - 1 && mapData.sudMapId) return 'SUD';
-    if (x === 0 && mapData.ouestMapId) return 'OUEST';
-    if (x === mapData.largeur - 1 && mapData.estMapId) return 'EST';
+    if (mapData.nordMapId && mapData.nordExitX === x && mapData.nordExitY === y) return 'NORD';
+    if (mapData.sudMapId && mapData.sudExitX === x && mapData.sudExitY === y) return 'SUD';
+    if (mapData.ouestMapId && mapData.ouestExitX === x && mapData.ouestExitY === y) return 'OUEST';
+    if (mapData.estMapId && mapData.estExitX === x && mapData.estExitY === y) return 'EST';
     return null;
   };
 
@@ -709,6 +730,10 @@ const MapPage: React.FC = () => {
               ...(gridPixelSize
                 ? { width: gridPixelSize.w, height: gridPixelSize.h }
                 : { width: '100%', aspectRatio: `${mapData.largeur} / ${mapData.hauteur}` }),
+              ...(mapData.imageUrl
+                ? { backgroundImage: `url(${mapData.imageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+                : {}),
+              position: 'relative',
             }}
           >
             {Array.from({ length: mapData.hauteur }, (_, y) =>
@@ -785,6 +810,19 @@ const MapPage: React.FC = () => {
                 );
               })
             )}
+            {/* Premier-plan overlay: rendered on top of entities */}
+            {mapCases.filter(c => c.estPremierPlan).map(c => (
+              <div
+                key={`pp-${c.x}-${c.y}`}
+                className="premier-plan-cell"
+                style={{
+                  gridColumn: c.x + 1,
+                  gridRow: c.y + 1,
+                  pointerEvents: 'none',
+                  zIndex: 3,
+                }}
+              />
+            ))}
           </div>
         </div>
 
@@ -838,22 +876,6 @@ const MapPage: React.FC = () => {
             </div>
           )}
 
-          {/* Portals */}
-          {mapData.connectionsFrom && mapData.connectionsFrom.length > 0 && (
-            <div className="adv-panel-section">
-              <h4>Portails ({mapData.connectionsFrom.length})</h4>
-              {mapData.connectionsFrom.map(conn => (
-                <div key={conn.id} className="adv-panel-card" style={{ borderLeft: conn.donjonId ? '3px solid #8e24aa' : '3px solid #1976d2' }}>
-                  <div style={{ fontWeight: 600, fontSize: 11 }}>
-                    {conn.donjonId ? '⚔️' : '🚪'} {conn.nom}
-                  </div>
-                  <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>({conn.positionX}, {conn.positionY})</div>
-                  {conn.donjon && <div style={{ fontSize: 10, color: '#8e24aa' }}>{conn.donjon.nom} Niv.{conn.donjon.niveauMin}-{conn.donjon.niveauMax}</div>}
-                  {conn.toMap && !conn.donjonId && <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>→ {conn.toMap.nom}</div>}
-                </div>
-              ))}
-            </div>
-          )}
 
           {/* Allied chars on same map */}
           {alliedChars.length > 0 && (
@@ -907,7 +929,14 @@ const MapPage: React.FC = () => {
           {mapData.combatMode === 'MANUEL' && (
             <button className="btn btn-sm btn-secondary" onClick={handleSpawnEnemies}>Spawn ennemis</button>
           )}
-          <button className="btn btn-sm btn-secondary" onClick={handleLeaveMap}>Quitter map</button>
+          {isSoloMode && isInDungeon ? (
+            <>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Salle {dungeonSalleActuelle}/4</span>
+              <button className="btn btn-sm btn-danger" onClick={handleAbandonDungeon}>Abandonner le donjon</button>
+            </>
+          ) : (
+            <button className="btn btn-sm btn-secondary" onClick={handleLeaveMap}>Quitter map</button>
+          )}
           <button className="btn btn-sm btn-secondary" onClick={() => navigate('/game/dashboard')}>Retour au camp</button>
         </div>
 
