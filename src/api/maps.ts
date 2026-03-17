@@ -45,6 +45,13 @@ export const uploadApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     }).then(r => r.data);
   },
+  entityImage: (file: File, type: 'characters' | 'pnj' | 'monsters' | 'portals' | 'races'): Promise<{ url: string; filename: string }> => {
+    const form = new FormData();
+    form.append('image', file);
+    return api.post<{ url: string; filename: string }>(`/upload/entity-image?type=${type}`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }).then(r => r.data);
+  },
 };
 
 export const monstresApi = {

@@ -3,6 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { combatApi } from '../../api/combat';
 import { zonesApi } from '../../api/static';
 import type { CombatState, CombatEntity, CombatCase, Sort, EffetActif, ZoneType, Zone, CombatLogEntry, ZonePoseeState } from '../../types';
+import SpriteAnimator from '../../components/SpriteAnimator';
+import type { SpriteAnimState } from '../../utils/spriteConfig';
 import {
   getReachableCells,
   getCellsInRange,
@@ -143,6 +145,18 @@ const CombatPage: React.FC = () => {
   const [hoveredSlotIdx, setHoveredSlotIdx] = useState<number | 'arme' | null>(null);
   const [zones, setZones] = useState<Zone[]>([]);
   const logRef = useRef<HTMLDivElement>(null);
+  const [entityAnimStates, setEntityAnimStates] = useState<Map<number, SpriteAnimState>>(new Map());
+
+  const triggerEntityAnim = useCallback((entityId: number, state: SpriteAnimState, durationMs: number) => {
+    setEntityAnimStates(prev => new Map(prev).set(entityId, state));
+    setTimeout(() => {
+      setEntityAnimStates(prev => {
+        const next = new Map(prev);
+        next.delete(entityId);
+        return next;
+      });
+    }, durationMs);
+  }, []);
   const lastLogIdRef = useRef<number>(0);
   const gridContainerRef = useRef<HTMLDivElement>(null);
   const [gridPixelSize, setGridPixelSize] = useState<{ w: number; h: number } | null>(null);
@@ -194,6 +208,9 @@ const CombatPage: React.FC = () => {
         setFloatingTexts(prev => [...prev, ...newFloating]);
         const ids = newFloating.map(f => f.id);
         setTimeout(() => setFloatingTexts(prev => prev.filter(f => !ids.includes(f.id))), 1200);
+        for (const f of newFloating) {
+          if (!f.isHeal) triggerEntityAnim(f.entityId, 'hit', 400);
+        }
       }
       setCombat(data);
       if (data.logs) {
@@ -509,6 +526,7 @@ const CombatPage: React.FC = () => {
       const k = `${x},${y}`;
       if (!rangeCells.has(k)) return;
       try {
+        triggerEntityAnim(currentEntity.id, 'attack', 600);
         await combatApi.action(combat.id, {
           entiteId: currentEntity.id,
           useArme: true,
@@ -525,6 +543,7 @@ const CombatPage: React.FC = () => {
       const k = `${x},${y}`;
       if (!rangeCells.has(k)) return;
       try {
+        triggerEntityAnim(currentEntity.id, 'attack', 600);
         await combatApi.action(combat.id, {
           entiteId: currentEntity.id,
           sortId: selectedSort.id,
@@ -797,7 +816,10 @@ const CombatPage: React.FC = () => {
               : {}),
             position: 'relative',
           }}>
-            {Array.from({ length: combat.grille.hauteur }, (_, y) =>
+            {(() => {
+              const cellW = gridPixelSize ? gridPixelSize.w / combat.grille.largeur : 40;
+              const cellH = gridPixelSize ? gridPixelSize.h / combat.grille.hauteur : 40;
+              return Array.from({ length: combat.grille.hauteur }, (_, y) =>
               Array.from({ length: combat.grille.largeur }, (_, x) => {
                 const cellKey = `${x},${y}`;
                 const obstacle = obstacleMap.get(cellKey);
@@ -820,7 +842,7 @@ const CombatPage: React.FC = () => {
                 if (obstacle) {
                   cellClass += obstacle.bloqueLigneDeVue ? ' obstacle-los' : ' obstacle';
                 }
-                if (entity && !isDead) {
+                if (entity && !isDead && !entity.imageUrl) {
                   if (entity.invocateurId) cellClass += ' invocation-cell';
                   else if (entity.equipe === 0) cellClass += ' player-cell';
                   else cellClass += ' enemy-cell';
@@ -853,9 +875,25 @@ const CombatPage: React.FC = () => {
                         <div className="hp-mini">
                           <div className="hp-mini-fill" style={{ width: `${(entity.pvActuels / entity.pvMax) * 100}%` }} />
                         </div>
-                        <span className="entity-icon">
-                          {entity.invocateurId ? 'I' : entity.equipe === 0 ? 'J' : 'M'}
-                        </span>
+                        {entity.imageUrl ? (
+                          <SpriteAnimator
+                            imageUrl={entity.imageUrl}
+                            animState={entity.pvActuels <= 0 ? 'death' : (entityAnimStates.get(entity.id) ?? 'idle')}
+                            displayHeight={1.4 * (entity.spriteScale ?? 1) * cellH}
+                            style={{
+                              position: 'absolute',
+                              bottom: `${(entity.spriteOffsetY ?? 0) / 100 * cellH}px`,
+                              left: `${cellW * (0.5 + (entity.spriteOffsetX ?? 0) / 100)}px`,
+                              transform: 'translateX(-50%)',
+                              pointerEvents: 'none',
+                              zIndex: 2,
+                            }}
+                          />
+                        ) : (
+                          <span className="entity-icon">
+                            {entity.invocateurId ? 'I' : entity.equipe === 0 ? 'J' : 'M'}
+                          </span>
+                        )}
                         <span className="entity-name">{entity.nom}</span>
                         {(entHasBuff || entHasDebuff || entityEffects.some(ef => ef.type === 'BOUCLIER')) && (
                           <div className="cell-effects">
@@ -931,7 +969,8 @@ const CombatPage: React.FC = () => {
                   </div>
                 );
               })
-            )}
+            );
+            })()}
             {/* Premier-plan overlay */}
             {(combat.mapPremierPlan ?? []).map((c, i) => (
               <div

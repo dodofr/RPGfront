@@ -12,6 +12,11 @@ dist
 dist-ssr
 *.local
 
+# Assets images (trop lourds pour git)
+public/assets/maps/
+public/assets/monsters/
+public/assets/races/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

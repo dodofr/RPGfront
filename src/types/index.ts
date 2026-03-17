@@ -11,6 +11,7 @@ export type MapType = 'WILDERNESS' | 'VILLE' | 'DONJON' | 'BOSS' | 'SAFE';
 export type CombatMode = 'MANUEL' | 'AUTO';
 export type IAType = 'EQUILIBRE' | 'AGGRESSIF' | 'SOUTIEN' | 'DISTANCE';
 export type Direction = 'NORD' | 'SUD' | 'EST' | 'OUEST';
+export type Sexe = 'HOMME' | 'FEMME';
 
 // Models
 export interface Player {
@@ -28,6 +29,11 @@ export interface Race {
   bonusAgilite: number;
   bonusVie: number;
   bonusChance: number;
+  imageUrlHomme?: string | null;
+  imageUrlFemme?: string | null;
+  spriteScale?: number;
+  spriteOffsetX?: number;
+  spriteOffsetY?: number;
   sorts?: Sort[];
 }
 
@@ -238,6 +244,10 @@ export interface GameMap {
   estExitY: number | null;
   ouestExitX: number | null;
   ouestExitY: number | null;
+  nordExitImageUrl?: string | null;
+  sudExitImageUrl?: string | null;
+  estExitImageUrl?: string | null;
+  ouestExitImageUrl?: string | null;
   groupesEnnemis?: GroupeEnnemi[];
   connectionsFrom?: MapConnection[];
   cases?: MapCase[];
@@ -253,6 +263,7 @@ export interface MapConnection {
   positionX: number;
   positionY: number;
   nom: string;
+  imageUrl?: string | null;
   donjonId?: number | null;
   donjon?: { id: number; nom: string; description: string | null; niveauMin: number; niveauMax: number } | null;
 }
@@ -260,6 +271,10 @@ export interface MapConnection {
 export interface MonsterTemplate {
   id: number;
   nom: string;
+  imageUrl?: string | null;
+  spriteScale?: number;
+  spriteOffsetX?: number;
+  spriteOffsetY?: number;
   force: number;
   intelligence: number;
   dexterite: number;
@@ -342,6 +357,8 @@ export interface TotalStats {
 export interface Character {
   id: number;
   nom: string;
+  imageUrl?: string | null;
+  sexe?: Sexe;
   niveau: number;
   experience: number;
   pointsStatsDisponibles: number;
@@ -408,6 +425,10 @@ export interface CombatEntity {
   resistanceAgilite: number;
   bonusDommages: number;
   bonusSoins: number;
+  imageUrl?: string | null;
+  spriteScale?: number;
+  spriteOffsetX?: number;
+  spriteOffsetY?: number;
   sorts?: Sort[];
 }
 
@@ -663,6 +684,10 @@ export interface MarchandLigne {
 export interface PNJ {
   id: number;
   nom: string;
+  imageUrl?: string | null;
+  spriteScale?: number;
+  spriteOffsetX?: number;
+  spriteOffsetY?: number;
   description?: string | null;
   mapId: number;
   map?: { id: number; nom: string; type: MapType };

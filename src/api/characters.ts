@@ -4,7 +4,7 @@ import type { Character, InventoryState, SlotType, Recette, Direction } from '..
 export const charactersApi = {
   getAll: () => api.get<Character[]>('/characters').then(r => r.data),
   getById: (id: number) => api.get<Character>(`/characters/${id}`).then(r => r.data),
-  create: (data: { nom: string; joueurId: number; raceId: number }) =>
+  create: (data: { nom: string; joueurId: number; raceId: number; sexe?: string }) =>
     api.post<Character>('/characters', data).then(r => r.data),
   update: (id: number, data: Partial<Character>) =>
     api.patch<Character>(`/characters/${id}`, data).then(r => r.data),
@@ -46,8 +46,6 @@ export const charactersApi = {
     api.post(`/characters/${id}/move-direction`, { direction }).then(r => r.data),
   navUseConnection: (id: number, connectionId: number, destinationConnectionId?: number, difficulte?: number) =>
     api.post(`/characters/${id}/use-connection`, { connectionId, ...(destinationConnectionId ? { destinationConnectionId } : {}), ...(difficulte ? { difficulte } : {}) }).then(r => r.data),
-  navLeaveMap: (id: number) =>
-    api.post(`/characters/${id}/leave-map`).then(r => r.data),
 };
 
 export const recipesApi = {

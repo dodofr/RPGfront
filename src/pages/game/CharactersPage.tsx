@@ -8,6 +8,7 @@ import { queteApi } from '../../api/quetes';
 import type { Character, Player, Race, Sort, Equipment, SlotType, InventoryState, Recette, MapType, CompetencePassive, QuetePersonnage } from '../../types';
 import FormModal, { type FieldDef } from '../../components/FormModal';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import { SPRITE_CONFIG } from '../../utils/spriteConfig';
 import '../../styles/admin.css';
 
 // Normalize effect from either flat (combat) or nested (API) format
@@ -72,6 +73,7 @@ const SLOTS: { key: SlotType; label: string }[] = [
 ];
 
 const STAT_KEYS = ['force', 'intelligence', 'dexterite', 'agilite', 'vie', 'chance'] as const;
+
 
 interface CharactersPageProps {
   playerId?: number;
@@ -269,6 +271,9 @@ const CharactersPage: React.FC<CharactersPageProps> = ({ playerId: playerIdProp 
       ...(playerId ? { defaultValue: playerId } : {}) },
     { name: 'raceId', label: 'Race', type: 'select', required: true,
       options: races.map(r => ({ value: r.id, label: r.nom })) },
+    { name: 'sexe', label: 'Sexe', type: 'select', required: true,
+      options: [{ value: 'HOMME', label: 'Homme' }, { value: 'FEMME', label: 'Femme' }],
+      defaultValue: 'HOMME' },
   ];
 
   const allocateStat = async (stat: string) => {
@@ -343,9 +348,50 @@ const CharactersPage: React.FC<CharactersPageProps> = ({ playerId: playerIdProp 
             )}
           </div>
           <p className="char-meta" style={{ marginTop: 6 }}>
-            Race: {selected.race?.nom} | XP: {selected.experience} / {selected.niveau * selected.niveau * 50} | Points disponibles: {selected.pointsStatsDisponibles}
+            Race: {selected.race?.nom} | Sexe: {selected.sexe === 'FEMME' ? 'Femme' : 'Homme'} | XP: {selected.experience} / {selected.niveau * selected.niveau * 50} | Points disponibles: {selected.pointsStatsDisponibles}
             {selected.mapId ? ` | Map: ${selected.map?.nom ?? `#${selected.mapId}`} (${selected.positionX}, ${selected.positionY})` : ' | Hors map'}
           </p>
+
+          {/* Image du personnage (calculée depuis la race) */}
+          {selected.imageUrl && (() => {
+            const CELL = 100;
+            const scale = selected.race?.spriteScale ?? 1;
+            const offsetX = selected.race?.spriteOffsetX ?? 0;
+            const offsetY = selected.race?.spriteOffsetY ?? 0;
+            const config = SPRITE_CONFIG[selected.imageUrl];
+            const displayHeight = 1.4 * scale * CELL;
+
+            return (
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ width: CELL, height: CELL, background: 'rgba(0,0,0,0.3)', borderRadius: 4, position: 'relative', overflow: 'visible' }}>
+                  {config ? (() => {
+                    const anim = config.animations['idle'];
+                    const col = anim.startFrame ?? 0;
+                    const row = anim.row;
+                    const s = displayHeight / config.frameH;
+                    return (
+                      <div style={{
+                        position: 'absolute',
+                        bottom: `${offsetY}%`,
+                        left: `calc(50% + ${offsetX}%)`,
+                        transform: 'translateX(-50%)',
+                        width: config.frameW * s,
+                        height: displayHeight,
+                        backgroundImage: `url(${config.sheet})`,
+                        backgroundSize: `${config.cols * config.frameW * s}px ${config.rows * config.frameH * s}px`,
+                        backgroundPosition: `${-col * config.frameW * s}px ${-row * config.frameH * s}px`,
+                        backgroundRepeat: 'no-repeat',
+                        pointerEvents: 'none',
+                      }} />
+                    );
+                  })() : (
+                    <img src={selected.imageUrl} alt={selected.nom}
+                      style={{ position: 'absolute', bottom: `${offsetY}%`, left: `calc(50% + ${offsetX}%)`, transform: 'translateX(-50%)', height: `${140 * scale}%`, width: 'auto', pointerEvents: 'none' }} />
+                  )}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Stats Section */}
           <h3 className="section-title">Stats</h3>
@@ -975,7 +1021,7 @@ const CharactersPage: React.FC<CharactersPageProps> = ({ playerId: playerIdProp 
 
       <FormModal open={showCreate} title="Creer un personnage" fields={createFields}
         onSubmit={async (vals) => {
-          await charactersApi.create(vals as { nom: string; joueurId: number; raceId: number });
+          await charactersApi.create(vals as { nom: string; joueurId: number; raceId: number; sexe: string });
           setShowCreate(false);
           refresh();
         }}

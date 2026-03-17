@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { pnjApi } from '../../api/pnj';
-import { mapsApi } from '../../api/maps';
+import { mapsApi, uploadApi } from '../../api/maps';
 import { equipmentApi, resourcesApi } from '../../api/static';
 import { queteApi } from '../../api/quetes';
 import type { PNJ, MarchandLigne, GameMap, Equipment, Ressource, PNJDialogue, DialogueType, Quete } from '../../types';
@@ -28,6 +28,12 @@ const PNJDetailPage: React.FC = () => {
   const [positionY, setPositionY] = useState(0);
   const [description, setDescription] = useState('');
   const [estMarchand, setEstMarchand] = useState(false);
+  const [imageUrl, setImageUrl] = useState<string>('');
+  const [spriteScale, setSpriteScale] = useState(1.0);
+  const [spriteOffsetX, setSpriteOffsetX] = useState(0);
+  const [spriteOffsetY, setSpriteOffsetY] = useState(0);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Confirmations
   const [deletingPnj, setDeletingPnj] = useState(false);
@@ -61,6 +67,10 @@ const PNJDetailPage: React.FC = () => {
     setPositionY(p.positionY);
     setDescription(p.description ?? '');
     setEstMarchand(p.estMarchand);
+    setImageUrl(p.imageUrl ?? '');
+    setSpriteScale(p.spriteScale ?? 1.0);
+    setSpriteOffsetX(p.spriteOffsetX ?? 0);
+    setSpriteOffsetY(p.spriteOffsetY ?? 0);
   }, [id]);
 
   useEffect(() => {
@@ -78,7 +88,7 @@ const PNJDetailPage: React.FC = () => {
     if (!pnj) return;
     setSaving(true);
     try {
-      await pnjApi.update(pnj.id, { nom, mapId, positionX, positionY, description: description || null, estMarchand });
+      await pnjApi.update(pnj.id, { nom, mapId, positionX, positionY, description: description || null, estMarchand, imageUrl: imageUrl || null, spriteScale, spriteOffsetX, spriteOffsetY });
       await loadPnj();
     } catch (e: any) {
       setError(e?.response?.data?.error || 'Erreur lors de la sauvegarde');
@@ -284,6 +294,101 @@ const PNJDetailPage: React.FC = () => {
                     </div>
                   </div>
                 </label>
+              </div>
+
+              {/* Image + Sprite */}
+              <div>
+                <label style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: 4 }}>Image (URL)</label>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <input
+                    type="text"
+                    value={imageUrl}
+                    onChange={e => setImageUrl(e.target.value)}
+                    placeholder="/assets/pnj/mon-pnj.png"
+                    style={{ flex: 1 }}
+                  />
+                  <button
+                    className="btn btn-sm btn-secondary"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading}
+                  >
+                    {uploading ? 'Upload...' : '📁 Importer'}
+                  </button>
+                </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  style={{ display: 'none' }}
+                  onChange={async e => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    setUploading(true);
+                    try {
+                      const { url } = await uploadApi.entityImage(file, 'pnj');
+                      setImageUrl(url);
+                    } catch (err: any) {
+                      setError(err?.response?.data?.error || 'Erreur upload');
+                    } finally {
+                      setUploading(false);
+                      e.target.value = '';
+                    }
+                  }}
+                />
+              </div>
+
+              {/* Éditeur sprite */}
+              <div style={{ border: '1px solid var(--border)', borderRadius: 6, padding: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                  <strong style={{ fontSize: 13 }}>Ajustement sprite 🎨</strong>
+                  <button className="btn btn-sm btn-secondary" onClick={() => { setSpriteScale(1); setSpriteOffsetX(0); setSpriteOffsetY(0); }} title="Réinitialiser">↺</button>
+                </div>
+                <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+                  {/* Preview */}
+                  <div style={{ width: 120, height: 120, background: '#1a237e', border: '2px solid #4a5568', position: 'relative', overflow: 'visible', flexShrink: 0 }}>
+                    {imageUrl ? (
+                      <img src={imageUrl} alt="" style={{
+                        position: 'absolute',
+                        bottom: `${spriteOffsetY}%`,
+                        left: `calc(50% + ${spriteOffsetX}%)`,
+                        transform: 'translateX(-50%)',
+                        height: `${140 * spriteScale}%`,
+                        width: 'auto',
+                        pointerEvents: 'none',
+                      }} />
+                    ) : (
+                      <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: 11 }}>Aucune image</span>
+                    )}
+                  </div>
+                  {/* Contrôles */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Taille : {spriteScale.toFixed(2)}</div>
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        <button className="btn btn-sm" onClick={() => setSpriteScale(s => Math.max(0.1, parseFloat((s - 0.05).toFixed(2))))} style={{ minWidth: 32 }}>−</button>
+                        <button className="btn btn-sm" onClick={() => setSpriteScale(s => parseFloat((s + 0.05).toFixed(2)))} style={{ minWidth: 32 }}>+</button>
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>
+                        Position : X {spriteOffsetX > 0 ? '+' : ''}{spriteOffsetX.toFixed(0)}% / Y {spriteOffsetY > 0 ? '+' : ''}{spriteOffsetY.toFixed(0)}%
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '32px 32px 32px', gridTemplateRows: '32px 32px 32px', gap: 2 }}>
+                        <div />
+                        <button className="btn btn-sm" onClick={() => setSpriteOffsetY(v => v + 2)} style={{ padding: 0 }}>↑</button>
+                        <div />
+                        <button className="btn btn-sm" onClick={() => setSpriteOffsetX(v => v - 2)} style={{ padding: 0 }}>←</button>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <div style={{ width: 6, height: 6, background: 'var(--text-muted)', borderRadius: '50%' }} />
+                        </div>
+                        <button className="btn btn-sm" onClick={() => setSpriteOffsetX(v => v + 2)} style={{ padding: 0 }}>→</button>
+                        <div />
+                        <button className="btn btn-sm" onClick={() => setSpriteOffsetY(v => v - 2)} style={{ padding: 0 }}>↓</button>
+                        <div />
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

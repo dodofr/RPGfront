@@ -23,6 +23,4 @@ export const groupsApi = {
     }).then(r => r.data),
   moveDirection: (id: number, direction: Direction) =>
     api.post(`/groups/${id}/move-direction`, { direction }).then(r => r.data),
-  leaveMap: (id: number) =>
-    api.post(`/groups/${id}/leave-map`).then(r => r.data),
 };

@@ -14,9 +14,10 @@ interface DataTableProps<T extends { id: number }> {
   onRowClick?: (item: T) => void;
   selectedId?: number;
   loading?: boolean;
+  extraActions?: (item: T) => React.ReactNode;
 }
 
-function DataTable<T extends { id: number }>({ columns, data, onEdit, onDelete, onRowClick, selectedId, loading }: DataTableProps<T>) {
+function DataTable<T extends { id: number }>({ columns, data, onEdit, onDelete, onRowClick, selectedId, loading, extraActions }: DataTableProps<T>) {
   if (loading) return <div className="loading">Chargement...</div>;
 
   return (
@@ -26,7 +27,7 @@ function DataTable<T extends { id: number }>({ columns, data, onEdit, onDelete, 
           {columns.map(col => (
             <th key={col.key}>{col.header}</th>
           ))}
-          {(onEdit || onDelete) && <th>Actions</th>}
+          {(onEdit || onDelete || extraActions) && <th>Actions</th>}
         </tr>
       </thead>
       <tbody>
@@ -46,8 +47,9 @@ function DataTable<T extends { id: number }>({ columns, data, onEdit, onDelete, 
                     : String((item as Record<string, unknown>)[col.key] ?? '')}
                 </td>
               ))}
-              {(onEdit || onDelete) && (
+              {(onEdit || onDelete || extraActions) && (
                 <td className="actions">
+                  {extraActions && <span onClick={e => e.stopPropagation()}>{extraActions(item)}</span>}
                   {onEdit && <button className="btn btn-sm" onClick={(e) => { e.stopPropagation(); onEdit(item); }}>Modifier</button>}
                   {onDelete && <button className="btn btn-sm btn-danger" onClick={(e) => { e.stopPropagation(); onDelete(item); }}>Supprimer</button>}
                 </td>

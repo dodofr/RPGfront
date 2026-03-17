@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import ConfirmDialog from '../../components/ConfirmDialog';
-import { monstresApi, regionsApi } from '../../api/maps';
+import { monstresApi, regionsApi, uploadApi } from '../../api/maps';
 import { sortsApi, equipmentApi, resourcesApi } from '../../api/static';
 import type { MonsterTemplate, Sort, Equipment, Ressource, Region, IAType } from '../../types';
 import '../../styles/admin.css';
@@ -56,6 +56,16 @@ const MonstreDetailPage: React.FC = () => {
   const [addRegionId, setAddRegionId] = useState<number>(0);
   const [addRegionProba, setAddRegionProba] = useState<number>(0.5);
 
+  // Image + sprite
+  const [imageUrl, setImageUrl] = useState<string>('');
+  const [spriteScale, setSpriteScale] = useState<number>(1.0);
+  const [spriteOffsetX, setSpriteOffsetX] = useState<number>(0);
+  const [spriteOffsetY, setSpriteOffsetY] = useState<number>(0);
+  const [uploading, setUploading] = useState(false);
+  const [imageError, setImageError] = useState<string>('');
+  const [savingSprite, setSavingSprite] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const isInvocation = monstre
     ? (monstre.pvScalingInvocation !== null || monstre.xpRecompense === 0)
     : false;
@@ -68,6 +78,10 @@ const MonstreDetailPage: React.FC = () => {
       setMonstre(data);
       setNom(data.nom);
       setIaType(data.iaType);
+      setImageUrl(data.imageUrl ?? '');
+      setSpriteScale(data.spriteScale ?? 1.0);
+      setSpriteOffsetX(data.spriteOffsetX ?? 0);
+      setSpriteOffsetY(data.spriteOffsetY ?? 0);
       setStats({
         force: data.force, intelligence: data.intelligence, dexterite: data.dexterite,
         agilite: data.agilite, vie: data.vie, chance: data.chance,
@@ -95,9 +109,17 @@ const MonstreDetailPage: React.FC = () => {
   const handleSaveBase = async () => {
     if (!monstre) return;
     setSaving(true);
-    await monstresApi.update(monstre.id, { nom, iaType });
+    await monstresApi.update(monstre.id, { nom, iaType, imageUrl: imageUrl || null });
     await load();
     setSaving(false);
+  };
+
+  const handleSaveSprite = async () => {
+    if (!monstre) return;
+    setSavingSprite(true);
+    await monstresApi.update(monstre.id, { spriteScale, spriteOffsetX, spriteOffsetY });
+    await load();
+    setSavingSprite(false);
   };
 
   const handleSaveStats = async () => {
@@ -198,7 +220,7 @@ const MonstreDetailPage: React.FC = () => {
             : <span className="badge badge-danger">Ennemi</span>}
           <span className="badge badge-info">PV max calculé : {pvMax}</span>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <select
             value={iaType}
             onChange={e => setIaType(e.target.value as IAType)}
@@ -206,6 +228,46 @@ const MonstreDetailPage: React.FC = () => {
           >
             {IA_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
+          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+            <input
+              type="text"
+              value={imageUrl}
+              onChange={e => setImageUrl(e.target.value)}
+              placeholder="Image URL..."
+              style={{ width: 160, fontSize: 12, padding: '3px 6px' }}
+            />
+            <button
+              className="btn btn-sm btn-secondary"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              title="Importer une image"
+            >
+              {uploading ? '...' : '📁'}
+            </button>
+            {imageUrl && <img src={imageUrl} alt="preview" style={{ height: 28, borderRadius: 3, border: '1px solid var(--border)' }} />}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              style={{ display: 'none' }}
+              onChange={async e => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                setUploading(true);
+                setImageError('');
+                try {
+                  const { url } = await uploadApi.entityImage(file, 'monsters');
+                  setImageUrl(url);
+                } catch (err: any) {
+                  setImageError(err?.response?.data?.error || 'Erreur upload');
+                } finally {
+                  setUploading(false);
+                  e.target.value = '';
+                }
+              }}
+            />
+          </div>
+          {imageError && <span style={{ fontSize: 11, color: 'var(--danger)' }}>{imageError}</span>}
           <button className="btn btn-primary btn-sm" onClick={handleSaveBase} disabled={saving}>
             Sauvegarder nom / IA
           </button>
@@ -300,6 +362,68 @@ const MonstreDetailPage: React.FC = () => {
           </div>
           <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8 }}>
             Valeur directement en % (0-75). Ex : 50 → 50% de réduction | 75 = cap max
+          </div>
+        </div>
+
+        {/* Sprite */}
+        <div className="detail-page-section">
+          <div className="detail-page-section-header">
+            <h3>Sprite</h3>
+            <button className="btn btn-sm btn-primary" onClick={handleSaveSprite} disabled={savingSprite}>Sauvegarder</button>
+          </div>
+          <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+            {/* Preview */}
+            <div style={{ width: 120, height: 120, background: '#1a237e', border: '2px solid #4a5568', position: 'relative', overflow: 'visible', flexShrink: 0 }}>
+              {imageUrl ? (
+                <img
+                  src={imageUrl}
+                  alt=""
+                  style={{
+                    position: 'absolute',
+                    bottom: `${spriteOffsetY}%`,
+                    left: `calc(50% + ${spriteOffsetX}%)`,
+                    transform: 'translateX(-50%)',
+                    height: `${140 * spriteScale}%`,
+                    width: 'auto',
+                    objectFit: 'contain',
+                    pointerEvents: 'none',
+                  }}
+                />
+              ) : (
+                <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: 11 }}>
+                  Aucune image
+                </span>
+              )}
+            </div>
+            {/* Controls */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Taille : {spriteScale.toFixed(2)}</div>
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <button className="btn btn-sm" onClick={() => setSpriteScale(s => Math.max(0.1, Math.round((s - 0.05) * 100) / 100))} style={{ minWidth: 32 }}>−</button>
+                  <button className="btn btn-sm" onClick={() => setSpriteScale(s => Math.round((s + 0.05) * 100) / 100)} style={{ minWidth: 32 }}>+</button>
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>
+                  Position : X {spriteOffsetX > 0 ? '+' : ''}{spriteOffsetX.toFixed(0)}% / Y {spriteOffsetY > 0 ? '+' : ''}{spriteOffsetY.toFixed(0)}%
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '32px 32px 32px', gridTemplateRows: '32px 32px 32px', gap: 2 }}>
+                  <div />
+                  <button className="btn btn-sm" onClick={() => setSpriteOffsetY(y => Math.round((y + 2) * 10) / 10)} style={{ padding: 0 }}>↑</button>
+                  <div />
+                  <button className="btn btn-sm" onClick={() => setSpriteOffsetX(x => Math.round((x - 2) * 10) / 10)} style={{ padding: 0 }}>←</button>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div style={{ width: 6, height: 6, background: 'var(--text-muted)', borderRadius: '50%' }} />
+                  </div>
+                  <button className="btn btn-sm" onClick={() => setSpriteOffsetX(x => Math.round((x + 2) * 10) / 10)} style={{ padding: 0 }}>→</button>
+                  <div />
+                  <button className="btn btn-sm" onClick={() => setSpriteOffsetY(y => Math.round((y - 2) * 10) / 10)} style={{ padding: 0 }}>↓</button>
+                  <div />
+                </div>
+              </div>
+              <button className="btn btn-sm btn-secondary" onClick={() => { setSpriteScale(1); setSpriteOffsetX(0); setSpriteOffsetY(0); }}>↺ Réinitialiser</button>
+            </div>
           </div>
         </div>
 

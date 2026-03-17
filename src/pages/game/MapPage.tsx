@@ -8,6 +8,8 @@ import { playersApi } from '../../api/players';
 import { queteApi } from '../../api/quetes';
 import { donjonsApi } from '../../api/donjons';
 import type { Group, GameMap, Direction, MapConnection, MapCase, PNJ, Character, InventoryState, InteractResponse, AdvanceQuestResponse, PnjStatusEntry } from '../../types';
+import SpriteAnimator from '../../components/SpriteAnimator';
+import type { SpriteAnimState } from '../../utils/spriteConfig';
 import '../../styles/index.css';
 
 // Build world grid layout from directional links using BFS
@@ -68,6 +70,34 @@ function buildWorldGrid(maps: GameMap[]): { grid: Map<string, GameMap>; minX: nu
   return { grid, minX, minY, maxX, maxY };
 }
 
+function findPath(
+  fromX: number, fromY: number,
+  toX: number, toY: number,
+  blocked: Set<string>,
+  width: number, height: number
+): { x: number; y: number }[] {
+  if (fromX === toX && fromY === toY) return [];
+  const visited = new Set<string>([`${fromX},${fromY}`]);
+  const queue: { x: number; y: number; path: { x: number; y: number }[] }[] = [
+    { x: fromX, y: fromY, path: [] }
+  ];
+  const dirs = [{ dx: 0, dy: -1 }, { dx: 0, dy: 1 }, { dx: -1, dy: 0 }, { dx: 1, dy: 0 }];
+  while (queue.length > 0) {
+    const { x, y, path } = queue.shift()!;
+    for (const { dx, dy } of dirs) {
+      const nx = x + dx, ny = y + dy;
+      const key = `${nx},${ny}`;
+      if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+      if (visited.has(key) || blocked.has(key)) continue;
+      const newPath = [...path, { x: nx, y: ny }];
+      if (nx === toX && ny === toY) return newPath;
+      visited.add(key);
+      queue.push({ x: nx, y: ny, path: newPath });
+    }
+  }
+  return [];
+}
+
 const TYPE_COLORS: Record<string, string> = {
   WILDERNESS: '#2e7d32',
   VILLE: '#5c6bc0',
@@ -95,8 +125,9 @@ const MapPage: React.FC = () => {
   const [mapCases, setMapCases] = useState<MapCase[]>([]);
   const [allMaps, setAllMaps] = useState<GameMap[]>([]);
   const [loading, setLoading] = useState(true);
-  const [enterMapId, setEnterMapId] = useState<number | null>(null);
   const [moving, setMoving] = useState(false);
+  const [animPos, setAnimPos] = useState<{ x: number; y: number } | null>(null);
+  const [spriteState, setSpriteState] = useState<SpriteAnimState>('idle');
   const [showWorldMap, setShowWorldMap] = useState(false);
 
   // Grid scaling (same approach as CombatPage)
@@ -281,6 +312,24 @@ const MapPage: React.FC = () => {
     init();
   }, [groupIdParam, charIdParam, loadGroup, loadCharacter]);
 
+  // Lightweight poll: refresh only character/group data (race sprites) every 3s
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      if (isSoloMode && charIdParam) {
+        try {
+          const c = await charactersApi.getById(Number(charIdParam));
+          setCharacter(c);
+        } catch { /* ignore */ }
+      } else if (!isSoloMode && groupIdParam) {
+        try {
+          const g = await groupsApi.getById(Number(groupIdParam));
+          setGroup(g);
+        } catch { /* ignore */ }
+      }
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [isSoloMode, charIdParam, groupIdParam]);
+
   const worldGrid = useMemo(() => buildWorldGrid(allMaps), [allMaps]);
 
   const connectionAt = useMemo(() => {
@@ -377,7 +426,34 @@ const MapPage: React.FC = () => {
 
     if (x === posX && y === posY) return;
 
+    const path = findPath(posX, posY, x, y, blockedAt, mapData.largeur, mapData.hauteur);
+    if (path.length === 0) return;
+
     setMoving(true);
+
+    await new Promise<void>(resolve => {
+      let step = 0;
+      let prevPos = { x: posX, y: posY };
+      const interval = setInterval(() => {
+        const curr = path[step];
+        const dx = curr.x - prevPos.x;
+        const dy = curr.y - prevPos.y;
+        const dir: SpriteAnimState =
+          dx > 0 ? 'walk-right' : dx < 0 ? 'walk-left' :
+          dy > 0 ? 'walk-down' : 'walk-up';
+        setSpriteState(dir);
+        setAnimPos(curr);
+        prevPos = curr;
+        step++;
+        if (step >= path.length) {
+          clearInterval(interval);
+          resolve();
+        }
+      }, 150);
+    });
+
+    setSpriteState('idle');
+
     try {
       let result;
       if (isSoloMode && character) {
@@ -386,11 +462,14 @@ const MapPage: React.FC = () => {
         result = await groupsApi.move(group.id, x, y);
       }
       if (result?.combat) {
+        setAnimPos(null);
         navigate(`/game/combat/${result.combat.id}`);
         return;
       }
       await reload();
+      setAnimPos(null);
     } catch (err: unknown) {
+      setAnimPos(null);
       const msg = err instanceof Error ? err.message :
         (err as any)?.response?.data?.error || 'Erreur';
       alert(msg);
@@ -416,41 +495,6 @@ const MapPage: React.FC = () => {
     setMoving(false);
   };
 
-  const handleEnterMap = async () => {
-    if (!enterMapId) return;
-    setMoving(true);
-    try {
-      let result;
-      if (isSoloMode && character) {
-        result = await charactersApi.navEnterMap(character.id, enterMapId);
-      } else if (group) {
-        result = await groupsApi.enterMap(group.id, enterMapId);
-      }
-      if (result?.combat) {
-        navigate(`/game/combat/${result.combat.id}`);
-        return;
-      }
-      await reload();
-    } catch (err: unknown) {
-      const msg = (err as any)?.response?.data?.error || (err instanceof Error ? err.message : 'Erreur');
-      alert(msg);
-    }
-    setMoving(false);
-  };
-
-  const handleLeaveMap = async () => {
-    try {
-      if (isSoloMode && character) {
-        await charactersApi.navLeaveMap(character.id);
-      } else if (group) {
-        await groupsApi.leaveMap(group.id);
-      }
-      await reload();
-    } catch (err: unknown) {
-      const msg = (err as any)?.response?.data?.error || (err instanceof Error ? err.message : 'Erreur');
-      alert(msg);
-    }
-  };
 
   const handleAbandonDungeon = async () => {
     if (!character) return;
@@ -570,44 +614,11 @@ const MapPage: React.FC = () => {
   if (loading) return <div className="loading">Chargement...</div>;
 
   if (!group && !character) {
-    return (
-      <div>
-        <div className="page-header">
-          <h1>Aventure</h1>
-          <button className="btn btn-secondary" onClick={() => navigate('/game/dashboard')}>Retour au camp</button>
-        </div>
-        <p className="meta">Aucun personnage ou groupe selectionne. Retournez au dashboard.</p>
-      </div>
-    );
+    return <div className="loading">Chargement...</div>;
   }
 
   if (!mapData) {
-    return (
-      <div>
-        <div className="page-header">
-          <h1>Aventure - {actorName}</h1>
-          <button className="btn btn-secondary" onClick={() => navigate('/game/dashboard')}>Retour au camp</button>
-        </div>
-        <div style={{ marginTop: 24 }}>
-          <p>Choisissez une map pour commencer :</p>
-          <div className="inline-form" style={{ marginTop: 12 }}>
-            <select
-              value={enterMapId ?? ''}
-              onChange={e => setEnterMapId(e.target.value ? Number(e.target.value) : null)}
-              style={{ minWidth: 200 }}
-            >
-              <option value="">-- Choisir une map --</option>
-              {allMaps.filter(m => m.type !== 'DONJON' && m.type !== 'BOSS').map(m => (
-                <option key={m.id} value={m.id}>{m.nom} ({m.type})</option>
-              ))}
-            </select>
-            <button className="btn btn-primary" onClick={handleEnterMap} disabled={!enterMapId || moving}>
-              Entrer
-            </button>
-          </div>
-        </div>
-      </div>
-    );
+    return <div className="loading">Chargement de la carte...</div>;
   }
 
   const enemies = (mapData.groupesEnnemis || []).filter(ge => !ge.vaincu);
@@ -736,26 +747,56 @@ const MapPage: React.FC = () => {
               position: 'relative',
             }}
           >
-            {Array.from({ length: mapData.hauteur }, (_, y) =>
+            {(() => {
+              const cellW = gridPixelSize ? gridPixelSize.w / mapData.largeur : 40;
+              const cellH = gridPixelSize ? gridPixelSize.h / mapData.hauteur : 40;
+              return Array.from({ length: mapData.hauteur }, (_, y) =>
               Array.from({ length: mapData.largeur }, (_, x) => {
                 const cellType = getCellType(x, y);
                 const edge = isEdge(x, y);
                 const enemy = cellType === 'enemy' ? getEnemyAt(x, y) : null;
                 const conn = connectionAt.get(`${x},${y}`);
                 const npc = pnjAt.get(`${x},${y}`);
-                const isPlayerHere = x === posX && y === posY;
+                const renderX = animPos?.x ?? posX;
+                const renderY = animPos?.y ?? posY;
+                const isPlayerHere = x === renderX && y === renderY;
                 const allyHere = alliedAt.get(`${x},${y}`);
 
                 const isBlocked = blockedAt.has(`${x},${y}`);
                 const isLosBlocked = losBlockedAt.has(`${x},${y}`);
                 let className = 'adventure-cell';
                 if (isBlocked) className += isLosBlocked ? ' cell-obstacle-los' : ' cell-obstacle';
-                if (isPlayerHere) className += ' cell-player';
-                else if (cellType === 'ally') className += ' cell-ally';
-                else if (cellType === 'enemy') className += ' cell-enemy';
+                const playerImg = isPlayerHere ? (isSoloMode ? character?.imageUrl : group?.leader?.imageUrl) : null;
+                if (isPlayerHere && !playerImg) className += ' cell-player';
+                else if (cellType === 'ally' && !allyHere?.imageUrl) className += ' cell-ally';
+                else if (cellType === 'enemy' && !enemy?.membres?.[0]?.monstre?.imageUrl) className += ' cell-enemy';
                 else if (cellType === 'connection') className += ' cell-connection';
                 else if (cellType === 'npc') className += ' cell-npc';
                 if (edge) className += ' cell-edge';
+
+                // Resolve entity image for this cell
+                const edgeImageUrl: string | null | undefined =
+                  edge === 'NORD' ? mapData.nordExitImageUrl :
+                  edge === 'SUD' ? mapData.sudExitImageUrl :
+                  edge === 'EST' ? mapData.estExitImageUrl :
+                  edge === 'OUEST' ? mapData.ouestExitImageUrl : null;
+
+                const cellImageUrl: string | null | undefined =
+                  isPlayerHere ? (isSoloMode ? character?.imageUrl : group?.leader?.imageUrl) :
+                  cellType === 'ally' ? allyHere?.imageUrl :
+                  cellType === 'enemy' ? (enemy?.membres?.[0]?.monstre?.imageUrl) :
+                  cellType === 'connection' ? conn?.imageUrl :
+                  cellType === 'npc' ? npc?.imageUrl :
+                  cellType === 'empty' && edge ? edgeImageUrl :
+                  null;
+
+                const cellRace = isPlayerHere
+                  ? (isSoloMode ? character?.race : group?.leader?.race)
+                  : cellType === 'ally' ? allyHere?.race : null;
+                const enemyMonstre = cellType === 'enemy' ? enemy?.membres?.[0]?.monstre : null;
+                const cellSpriteScale = cellRace?.spriteScale ?? enemyMonstre?.spriteScale ?? (cellType === 'npc' ? (npc?.spriteScale ?? 1) : 1);
+                const cellSpriteOffsetX = cellRace?.spriteOffsetX ?? enemyMonstre?.spriteOffsetX ?? (cellType === 'npc' ? (npc?.spriteOffsetX ?? 0) : 0);
+                const cellSpriteOffsetY = cellRace?.spriteOffsetY ?? enemyMonstre?.spriteOffsetY ?? (cellType === 'npc' ? (npc?.spriteOffsetY ?? 0) : 0);
 
                 return (
                   <div
@@ -764,7 +805,9 @@ const MapPage: React.FC = () => {
                     style={{
                       ...(cellType === 'connection' && !isPlayerHere ? { background: conn?.donjonId ? '#ce93d8' : '#90caf9' } : {}),
                       ...(cellType === 'npc' && !isPlayerHere ? { background: '#a5d6a7' } : {}),
-                      ...(cellType === 'ally' ? { background: '#1565c0' } : {}),
+                      ...(cellType === 'ally' && !allyHere?.imageUrl ? { background: '#1565c0' } : {}),
+                      overflow: 'visible',
+                      position: 'relative',
                     }}
                     onClick={() => {
                       setSelectedCell({ x, y });
@@ -784,32 +827,79 @@ const MapPage: React.FC = () => {
                               : `(${x}, ${y})`
                     }
                   >
-                    {isPlayerHere && <span className="cell-icon">{actorName.charAt(0).toUpperCase()}</span>}
-                    {cellType === 'ally' && <span className="cell-icon" title={allyHere?.nom}>{allyHere?.nom.charAt(0).toUpperCase() ?? 'A'}</span>}
-                    {cellType === 'enemy' && <span className="cell-icon">E</span>}
-                    {cellType === 'connection' && !isPlayerHere && (
-                      <span className="cell-icon">{conn?.donjonId ? '⚔' : '🚪'}</span>
-                    )}
-                    {cellType === 'npc' && !isPlayerHere && (
-                      <span className="cell-icon" style={{ position: 'relative' }} title={npc?.nom}>
-                        💬
-                        {pnjStatus.get(npc!.id)?.hasPending && (
-                          <span style={{ position: 'absolute', top: -4, right: -4, background: '#ff9800', color: '#000', borderRadius: '50%', width: 14, height: 14, fontSize: 9, lineHeight: '14px', textAlign: 'center', fontWeight: 'bold', display: 'block' }}>?</span>
+                    {cellImageUrl ? (
+                      isPlayerHere ? (
+                        <SpriteAnimator
+                          imageUrl={cellImageUrl}
+                          animState={spriteState}
+                          displayHeight={1.4 * cellSpriteScale * cellH}
+                          style={{
+                            position: 'absolute',
+                            bottom: `${cellSpriteOffsetY / 100 * cellH}px`,
+                            left: `${cellW * (0.5 + cellSpriteOffsetX / 100)}px`,
+                            transform: 'translateX(-50%)',
+                            pointerEvents: 'none',
+                            zIndex: 2,
+                          }}
+                        />
+                      ) : (
+                        <img
+                          src={cellImageUrl}
+                          alt=""
+                          style={{
+                            position: 'absolute',
+                            bottom: `${cellSpriteOffsetY / 100 * cellH}px`,
+                            left: `${cellW * (0.5 + cellSpriteOffsetX / 100)}px`,
+                            transform: 'translateX(-50%)',
+                            height: `${1.4 * cellSpriteScale * cellH}px`,
+                            width: 'auto',
+                            pointerEvents: 'none',
+                            zIndex: 2,
+                          }}
+                        />
+                      )
+                    ) : (
+                      <>
+                        {isPlayerHere && <span className="cell-icon">{actorName.charAt(0).toUpperCase()}</span>}
+                        {cellType === 'ally' && <span className="cell-icon" title={allyHere?.nom}>{allyHere?.nom.charAt(0).toUpperCase() ?? 'A'}</span>}
+                        {cellType === 'enemy' && <span className="cell-icon">E</span>}
+                        {cellType === 'connection' && !isPlayerHere && (
+                          <span className="cell-icon">{conn?.donjonId ? '⚔' : '🚪'}</span>
                         )}
-                        {!pnjStatus.get(npc!.id)?.hasPending && pnjStatus.get(npc!.id)?.hasAvailable && (
-                          <span style={{ position: 'absolute', top: -4, right: -4, background: '#4caf50', color: '#fff', borderRadius: '50%', width: 14, height: 14, fontSize: 9, lineHeight: '14px', textAlign: 'center', fontWeight: 'bold', display: 'block' }}>!</span>
+                        {cellType === 'npc' && !isPlayerHere && (
+                          <span className="cell-icon" style={{ position: 'relative' }} title={npc?.nom}>
+                            💬
+                            {pnjStatus.get(npc!.id)?.hasPending && (
+                              <span style={{ position: 'absolute', top: -4, right: -4, background: '#ff9800', color: '#000', borderRadius: '50%', width: 14, height: 14, fontSize: 9, lineHeight: '14px', textAlign: 'center', fontWeight: 'bold', display: 'block' }}>?</span>
+                            )}
+                            {!pnjStatus.get(npc!.id)?.hasPending && pnjStatus.get(npc!.id)?.hasAvailable && (
+                              <span style={{ position: 'absolute', top: -4, right: -4, background: '#4caf50', color: '#fff', borderRadius: '50%', width: 14, height: 14, fontSize: 9, lineHeight: '14px', textAlign: 'center', fontWeight: 'bold', display: 'block' }}>!</span>
+                            )}
+                          </span>
                         )}
-                      </span>
+                        {cellType === 'empty' && edge && (
+                          <span className="cell-edge-arrow">
+                            {edge === 'NORD' ? '↑' : edge === 'SUD' ? '↓' : edge === 'OUEST' ? '←' : '→'}
+                          </span>
+                        )}
+                      </>
                     )}
-                    {cellType === 'empty' && edge && (
-                      <span className="cell-edge-arrow">
-                        {edge === 'NORD' ? '↑' : edge === 'SUD' ? '↓' : edge === 'OUEST' ? '←' : '→'}
-                      </span>
+                    {/* Badge quête sur PNJ même avec image */}
+                    {cellImageUrl && cellType === 'npc' && npc && (
+                      <>
+                        {pnjStatus.get(npc.id)?.hasPending && (
+                          <span style={{ position: 'absolute', top: 0, right: 0, background: '#ff9800', color: '#000', borderRadius: '50%', width: 14, height: 14, fontSize: 9, lineHeight: '14px', textAlign: 'center', fontWeight: 'bold', display: 'block', zIndex: 3 }}>?</span>
+                        )}
+                        {!pnjStatus.get(npc.id)?.hasPending && pnjStatus.get(npc.id)?.hasAvailable && (
+                          <span style={{ position: 'absolute', top: 0, right: 0, background: '#4caf50', color: '#fff', borderRadius: '50%', width: 14, height: 14, fontSize: 9, lineHeight: '14px', textAlign: 'center', fontWeight: 'bold', display: 'block', zIndex: 3 }}>!</span>
+                        )}
+                      </>
                     )}
                   </div>
                 );
               })
-            )}
+            );
+            })()}
             {/* Premier-plan overlay: rendered on top of entities */}
             {mapCases.filter(c => c.estPremierPlan).map(c => (
               <div
@@ -929,15 +1019,12 @@ const MapPage: React.FC = () => {
           {mapData.combatMode === 'MANUEL' && (
             <button className="btn btn-sm btn-secondary" onClick={handleSpawnEnemies}>Spawn ennemis</button>
           )}
-          {isSoloMode && isInDungeon ? (
+          {isSoloMode && isInDungeon && (
             <>
               <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Salle {dungeonSalleActuelle}/4</span>
               <button className="btn btn-sm btn-danger" onClick={handleAbandonDungeon}>Abandonner le donjon</button>
             </>
-          ) : (
-            <button className="btn btn-sm btn-secondary" onClick={handleLeaveMap}>Quitter map</button>
           )}
-          <button className="btn btn-sm btn-secondary" onClick={() => navigate('/game/dashboard')}>Retour au camp</button>
         </div>
 
         <div className="adv-bottom-info">
