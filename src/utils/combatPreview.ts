@@ -393,6 +393,35 @@ export function getAffectedCells(
       }
       break;
 
+    case 'T_FORME': {
+      if (!casterPos) {
+        affected.add(key(target.x, target.y));
+        break;
+      }
+      const tdx = target.x - casterPos.x;
+      const tdy = target.y - casterPos.y;
+      let tFwdX: number, tFwdY: number, tPerpX: number, tPerpY: number;
+      if (Math.abs(tdx) > Math.abs(tdy)) {
+        tFwdX = tdx > 0 ? 1 : -1; tFwdY = 0;
+        tPerpX = 0; tPerpY = 1;
+      } else {
+        tFwdX = 0; tFwdY = tdy > 0 ? 1 : -1;
+        tPerpX = 1; tPerpY = 0;
+      }
+      affected.add(key(target.x, target.y));
+      for (let i = 1; i <= zone.taille; i++) {
+        if (isInBounds(target.x + tPerpX * i, target.y + tPerpY * i, gridWidth, gridHeight))
+          affected.add(key(target.x + tPerpX * i, target.y + tPerpY * i));
+        if (isInBounds(target.x - tPerpX * i, target.y - tPerpY * i, gridWidth, gridHeight))
+          affected.add(key(target.x - tPerpX * i, target.y - tPerpY * i));
+      }
+      const fwdX = target.x + tFwdX;
+      const fwdY = target.y + tFwdY;
+      if (isInBounds(fwdX, fwdY, gridWidth, gridHeight))
+        affected.add(key(fwdX, fwdY));
+      break;
+    }
+
     case 'CONE_INVERSE': {
       if (!casterPos) {
         affected.add(key(target.x, target.y));

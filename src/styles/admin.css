@@ -88,6 +88,12 @@
   font-size: 14px;
 }
 
+.grid-editor .grid-cell.resource-cell {
+  background: rgba(139, 195, 74, 0.3);
+  border-color: rgba(139, 195, 74, 0.7);
+  font-size: 14px;
+}
+
 .portal-config {
   display: flex;
   align-items: center;

@@ -7,7 +7,9 @@ import { charactersApi } from '../../api/characters';
 import { playersApi } from '../../api/players';
 import { queteApi } from '../../api/quetes';
 import { donjonsApi } from '../../api/donjons';
-import type { Group, GameMap, Direction, MapConnection, MapCase, PNJ, Character, InventoryState, InteractResponse, AdvanceQuestResponse, PnjStatusEntry } from '../../types';
+import { metiersApi } from '../../api/metiers';
+import { familiersApi } from '../../api/familiers';
+import type { Group, GameMap, Direction, MapConnection, MapCase, PNJ, Character, InventoryState, InteractResponse, AdvanceQuestResponse, PnjStatusEntry, MapRessource, PersonnageMetier, HarvestResult, Familier, FamilierEnclosAssignment, EnclosType } from '../../types';
 import SpriteAnimator from '../../components/SpriteAnimator';
 import type { SpriteAnimState } from '../../utils/spriteConfig';
 import '../../styles/index.css';
@@ -147,6 +149,21 @@ const MapPage: React.FC = () => {
   const [portalModal, setPortalModal] = useState<{ connection: MapConnection } | null>(null);
   const [allPortals, setAllPortals] = useState<MapConnection[]>([]);
 
+  // MapRessources state
+  const [mapRessources, setMapRessources] = useState<MapRessource[]>([]);
+  const [personnageMetiers, setPersonnageMetiers] = useState<PersonnageMetier[]>([]);
+  const [harvestFeedback, setHarvestFeedback] = useState<HarvestResult | null>(null);
+  const [harvestError, setHarvestError] = useState<string | null>(null);
+  const [harvesting, setHarvesting] = useState(false);
+
+  // Enclos state (VILLE maps only)
+  const [showEnclosPanel, setShowEnclosPanel] = useState(false);
+  const [enclosData, setEnclosData] = useState<FamilierEnclosAssignment[]>([]);
+  const [enclosFamiliers, setEnclosFamiliers] = useState<Familier[]>([]);
+  const [enclosDeposit, setEnclosDeposit] = useState<{ famId: number | ''; type: EnclosType; duree: number; partenaireId: number | '' }>({ famId: '', type: 'ENTRAINEMENT', duree: 60, partenaireId: '' });
+  const [enclosError, setEnclosError] = useState<string | null>(null);
+  const [enclosLoading, setEnclosLoading] = useState(false);
+
   // PNJ state
   const [mapPNJs, setMapPNJs] = useState<PNJ[]>([]);
   const [pnjStatus, setPnjStatus] = useState<Map<number, PnjStatusEntry>>(new Map());
@@ -157,7 +174,7 @@ const MapPage: React.FC = () => {
     interactData: InteractResponse;
     personnageId: number;
     chars: Character[];
-    activeTab: 'dialogue' | 'boutique';
+    activeTab: 'dialogue' | 'boutique' | 'enclos';
   } | null>(null);
   const [pnjFeedback, setPnjFeedback] = useState<string | null>(null);
   const [pnjRecompenses, setPnjRecompenses] = useState<AdvanceQuestResponse['recompenses'] | null>(null);
@@ -210,20 +227,26 @@ const MapPage: React.FC = () => {
     setGroup(g);
     const mapId = g.leader?.mapId;
     if (mapId) {
-      const [map, grid, pnjs, playerChars] = await Promise.all([
+      const leaderId = g.leaderId;
+      const [map, grid, pnjs, playerChars, ressources] = await Promise.all([
         mapsApi.getById(mapId),
         mapsApi.getGrid(mapId),
         pnjApi.getByMap(mapId),
         playersApi.getCharacters(g.joueurId),
+        metiersApi.getMapRessources(mapId),
       ]);
       setMapData(map);
       setMapCases(grid.cases ?? []);
       setMapPNJs(pnjs);
+      setMapRessources(ressources);
       const memberIds = new Set(g.personnages?.map((gp: any) => gp.personnage.id) ?? []);
       setAlliedChars(
         playerChars.filter((c: Character) => c.mapId === mapId && !memberIds.has(c.id))
       );
       const ids = g.personnages?.map((gp: any) => gp.personnage.id) ?? [];
+      if (leaderId) {
+        try { setPersonnageMetiers(await metiersApi.getPersonnageMetiers(leaderId)); } catch { /**/ }
+      }
       if (pnjs.length > 0 && ids.length > 0) {
         const statuses = await pnjApi.getMapStatus(mapId, ids);
         setPnjStatus(new Map(statuses.map(s => [s.pnjId, s])));
@@ -236,6 +259,7 @@ const MapPage: React.FC = () => {
       setMapPNJs([]);
       setAlliedChars([]);
       setPnjStatus(new Map());
+      setMapRessources([]);
     }
   }, [navigate]);
 
@@ -260,15 +284,19 @@ const MapPage: React.FC = () => {
       setDungeonSalleActuelle(null);
     }
     if (c.mapId) {
-      const [map, grid, pnjs, playerChars] = await Promise.all([
+      const [map, grid, pnjs, playerChars, ressources, metiers] = await Promise.all([
         mapsApi.getById(c.mapId),
         mapsApi.getGrid(c.mapId),
         pnjApi.getByMap(c.mapId),
         playersApi.getCharacters(c.joueurId),
+        metiersApi.getMapRessources(c.mapId),
+        metiersApi.getPersonnageMetiers(cId),
       ]);
       setMapData(map);
       setMapCases(grid.cases ?? []);
       setMapPNJs(pnjs);
+      setMapRessources(ressources);
+      setPersonnageMetiers(metiers);
       setAlliedChars(playerChars.filter((p: Character) => p.id !== cId && p.mapId === c.mapId));
       if (pnjs.length > 0) {
         const statuses = await pnjApi.getMapStatus(c.mapId, [cId]);
@@ -276,12 +304,16 @@ const MapPage: React.FC = () => {
       } else {
         setPnjStatus(new Map());
       }
+      setEnclosData([]);
+      setEnclosFamiliers([]);
     } else {
       setMapData(null);
       setMapCases([]);
       setMapPNJs([]);
       setAlliedChars([]);
       setPnjStatus(new Map());
+      setMapRessources([]);
+      setPersonnageMetiers([]);
     }
   }, [navigate]);
 
@@ -365,6 +397,37 @@ const MapPage: React.FC = () => {
     }
     return map;
   }, [mapPNJs]);
+
+  const ressourceAt = useMemo(() => {
+    const map = new Map<string, MapRessource>();
+    for (const r of mapRessources) {
+      map.set(`${r.caseX},${r.caseY}`, r);
+    }
+    return map;
+  }, [mapRessources]);
+
+  const handleHarvest = async (ressource: MapRessource) => {
+    const charId = isSoloMode ? character?.id : group?.leaderId;
+    if (!charId) return;
+    setHarvesting(true);
+    setHarvestFeedback(null);
+    setHarvestError(null);
+    try {
+      const result = await metiersApi.harvest(charId, ressource.id);
+      setHarvestFeedback(result);
+      // Refresh ressources to update lastHarvestAt
+      if (mapData) {
+        const fresh = await metiersApi.getMapRessources(mapData.id);
+        setMapRessources(fresh);
+        // Refresh metiers (xp/niveau)
+        const freshMetiers = await metiersApi.getPersonnageMetiers(charId);
+        setPersonnageMetiers(freshMetiers);
+      }
+    } catch (err: unknown) {
+      setHarvestError((err as any)?.response?.data?.error || (err instanceof Error ? err.message : 'Erreur'));
+    }
+    setHarvesting(false);
+  };
 
   const alliedAt = useMemo(() => {
     const map = new Map<string, Character>();
@@ -554,15 +617,25 @@ const MapPage: React.FC = () => {
     try {
       const interactData = await queteApi.interact(pnj.id, charId);
       const hasQuestContent = interactData.quetesDisponibles?.length > 0 || interactData.etapesEnAttente?.length > 0;
-      const defaultTab: 'dialogue' | 'boutique' = interactData.estMarchand && !hasQuestContent && !interactData.dialogues?.length ? 'boutique' : 'dialogue';
+      const defaultTab: 'dialogue' | 'boutique' | 'enclos' = interactData.estMarchand && !hasQuestContent && !interactData.dialogues?.length ? 'boutique' : 'dialogue';
       setPnjFeedback(null);
       setPnjRecompenses(null);
       setMerchantFeedback({});
       setMerchantInventory(null);
+      setEnclosError(null);
+      setEnclosDeposit({ famId: '', type: 'ENTRAINEMENT', duree: 60, partenaireId: '' });
       if (interactData.estMarchand && chars.length > 0) {
         setMerchantPersonnageId(chars[0].id);
         const inv = await charactersApi.getInventory(chars[0].id);
         setMerchantInventory(inv);
+      }
+      if (pnj.estGardienEnclos && chars.length > 0) {
+        const [enclos, fams] = await Promise.all([
+          familiersApi.getEnclosByMap(pnj.mapId).catch(() => []),
+          familiersApi.getByCharacter(chars[0].id).catch(() => []),
+        ]);
+        setEnclosData(enclos);
+        setEnclosFamiliers(fams);
       }
       setPnjModal({ pnj, interactData, personnageId: charId, chars, activeTab: defaultTab });
     } catch (err: unknown) {
@@ -631,7 +704,21 @@ const MapPage: React.FC = () => {
     }
     if (connectionAt.has(`${x},${y}`)) return 'connection';
     if (pnjAt.has(`${x},${y}`)) return 'npc';
+    if (ressourceAt.has(`${x},${y}`)) return 'resource';
     return 'empty';
+  };
+
+  const isRessourceAvailable = (r: MapRessource) => {
+    if (!r.lastHarvestAt) return true;
+    const elapsed = (Date.now() - new Date(r.lastHarvestAt).getTime()) / 1000 / 60;
+    return elapsed >= r.respawnMinutes;
+  };
+
+  const getNodeIcon = (nom: string) => {
+    const n = nom.toLowerCase();
+    if (n.includes('blé') || n.includes('ble') || n.includes('grain') || n.includes('champ')) return '🌾';
+    if (n.includes('lin')) return '🌿';
+    return '🌳';
   };
 
   const getEnemyAt = (x: number, y: number) =>
@@ -757,6 +844,7 @@ const MapPage: React.FC = () => {
                 const enemy = cellType === 'enemy' ? getEnemyAt(x, y) : null;
                 const conn = connectionAt.get(`${x},${y}`);
                 const npc = pnjAt.get(`${x},${y}`);
+                const nodeRessource = ressourceAt.get(`${x},${y}`);
                 const renderX = animPos?.x ?? posX;
                 const renderY = animPos?.y ?? posY;
                 const isPlayerHere = x === renderX && y === renderY;
@@ -772,6 +860,7 @@ const MapPage: React.FC = () => {
                 else if (cellType === 'enemy' && !enemy?.membres?.[0]?.monstre?.imageUrl) className += ' cell-enemy';
                 else if (cellType === 'connection') className += ' cell-connection';
                 else if (cellType === 'npc') className += ' cell-npc';
+                else if (cellType === 'resource') className += nodeRessource && isRessourceAvailable(nodeRessource) ? ' cell-resource' : ' cell-resource cell-resource-depleted';
                 if (edge) className += ' cell-edge';
 
                 // Resolve entity image for this cell
@@ -790,13 +879,21 @@ const MapPage: React.FC = () => {
                   cellType === 'empty' && edge ? edgeImageUrl :
                   null;
 
-                const cellRace = isPlayerHere
-                  ? (isSoloMode ? character?.race : group?.leader?.race)
-                  : cellType === 'ally' ? allyHere?.race : null;
+                const cellCharPerso = isPlayerHere
+                  ? (isSoloMode ? character : group?.leader)
+                  : cellType === 'ally' ? allyHere : null;
+                const cellRace = cellCharPerso?.race ?? null;
+                const cellIsFemme = cellCharPerso?.sexe === 'FEMME';
                 const enemyMonstre = cellType === 'enemy' ? enemy?.membres?.[0]?.monstre : null;
-                const cellSpriteScale = cellRace?.spriteScale ?? enemyMonstre?.spriteScale ?? (cellType === 'npc' ? (npc?.spriteScale ?? 1) : 1);
-                const cellSpriteOffsetX = cellRace?.spriteOffsetX ?? enemyMonstre?.spriteOffsetX ?? (cellType === 'npc' ? (npc?.spriteOffsetX ?? 0) : 0);
-                const cellSpriteOffsetY = cellRace?.spriteOffsetY ?? enemyMonstre?.spriteOffsetY ?? (cellType === 'npc' ? (npc?.spriteOffsetY ?? 0) : 0);
+                const cellSpriteScale = cellRace
+                  ? (cellIsFemme ? (cellRace.spriteScaleFemme ?? cellRace.spriteScale) : cellRace.spriteScale) ?? 1
+                  : enemyMonstre?.spriteScale ?? (cellType === 'npc' ? (npc?.spriteScale ?? 1) : 1);
+                const cellSpriteOffsetX = cellRace
+                  ? (cellIsFemme ? (cellRace.spriteOffsetXFemme ?? cellRace.spriteOffsetX) : cellRace.spriteOffsetX) ?? 0
+                  : enemyMonstre?.spriteOffsetX ?? (cellType === 'npc' ? (npc?.spriteOffsetX ?? 0) : 0);
+                const cellSpriteOffsetY = cellRace
+                  ? (cellIsFemme ? (cellRace.spriteOffsetYFemme ?? cellRace.spriteOffsetY) : cellRace.spriteOffsetY) ?? 0
+                  : enemyMonstre?.spriteOffsetY ?? (cellType === 'npc' ? (npc?.spriteOffsetY ?? 0) : 0);
 
                 return (
                   <div
@@ -833,6 +930,7 @@ const MapPage: React.FC = () => {
                           imageUrl={cellImageUrl}
                           animState={spriteState}
                           displayHeight={1.4 * cellSpriteScale * cellH}
+                          configOverride={cellRace ? (cellIsFemme ? (cellRace.spriteConfigFemme ?? cellRace.spriteConfigHomme) : cellRace.spriteConfigHomme) : undefined}
                           style={{
                             position: 'absolute',
                             bottom: `${cellSpriteOffsetY / 100 * cellH}px`,
@@ -865,6 +963,15 @@ const MapPage: React.FC = () => {
                         {cellType === 'enemy' && <span className="cell-icon">E</span>}
                         {cellType === 'connection' && !isPlayerHere && (
                           <span className="cell-icon">{conn?.donjonId ? '⚔' : '🚪'}</span>
+                        )}
+                        {cellType === 'resource' && nodeRessource && (
+                          <span
+                            className="cell-icon"
+                            title={`${nodeRessource.noeud.nom} (${nodeRessource.noeud.metier?.nom}) — ${isRessourceAvailable(nodeRessource) ? 'Disponible' : 'En repousse'}`}
+                            style={{ opacity: isRessourceAvailable(nodeRessource) ? 1 : 0.4, fontSize: '1.1em' }}
+                          >
+                            {getNodeIcon(nodeRessource.noeud.nom)}
+                          </span>
                         )}
                         {cellType === 'npc' && !isPlayerHere && (
                           <span className="cell-icon" style={{ position: 'relative' }} title={npc?.nom}>
@@ -1057,6 +1164,44 @@ const MapPage: React.FC = () => {
             const selConn = connectionAt.get(`${x},${y}`);
             const selPnj = pnjAt.get(`${x},${y}`);
             const selAlly = alliedAt.get(`${x},${y}`);
+            const selRessource = ressourceAt.get(`${x},${y}`);
+
+            if (selRessource) {
+              const noeud = selRessource.noeud;
+              const metierPerso = personnageMetiers.find(pm => pm.metierId === noeud.metierId);
+              const available = isRessourceAvailable(selRessource);
+              const canHarvest = metierPerso && metierPerso.niveau >= noeud.niveauMinAcces && available;
+              return (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flex: 1 }}>
+                  <div style={{ flex: 1 }}>
+                    <span style={{ fontWeight: 600 }}>{getNodeIcon(noeud.nom)} {noeud.nom}</span>
+                    <span style={{ color: 'var(--text-muted)', fontSize: 11, marginLeft: 8 }}>
+                      {noeud.metier?.nom} Niv.{noeud.niveauMinAcces}
+                      {metierPerso ? ` (vous : Niv.${metierPerso.niveau})` : ' (métier non appris)'}
+                    </span>
+                    {!available && (
+                      <span style={{ color: '#ff9800', fontSize: 11, marginLeft: 8 }}>En repousse…</span>
+                    )}
+                    {harvestError && <span style={{ color: 'var(--danger)', fontSize: 12, marginLeft: 8 }}>{harvestError}</span>}
+                    {harvestFeedback && (
+                      <span style={{ color: 'var(--success)', fontSize: 12, marginLeft: 8 }}>
+                        +{harvestFeedback.loot.map(l => `${l.quantite}× ${l.ressource.nom}`).join(', ')}
+                        {harvestFeedback.metier.levelUp && ` 🎉 Niveau ${harvestFeedback.metier.niveau} !`}
+                      </span>
+                    )}
+                  </div>
+                  {canHarvest && (
+                    <button
+                      className="btn btn-sm btn-success"
+                      disabled={harvesting}
+                      onClick={() => handleHarvest(selRessource)}
+                    >
+                      {harvesting ? '…' : 'Récolter'}
+                    </button>
+                  )}
+                </div>
+              );
+            }
 
             if (selEnemy) {
               return (
@@ -1246,16 +1391,20 @@ const MapPage: React.FC = () => {
                 <button className="btn btn-secondary" onClick={() => setPnjModal(null)}>Fermer</button>
               </div>
 
-              {interactData.estMarchand && (
+              {(interactData.estMarchand || pnj.estGardienEnclos) && (
                 <div style={{ display: 'flex', gap: 4, padding: '0 20px 0', borderBottom: '1px solid var(--border)', marginBottom: 0 }}>
-                  {(['dialogue', 'boutique'] as const).map(tab => (
+                  {([
+                    { key: 'dialogue', label: 'Dialogue' },
+                    ...(interactData.estMarchand ? [{ key: 'boutique', label: 'Boutique' }] : []),
+                    ...(pnj.estGardienEnclos ? [{ key: 'enclos', label: '🐾 Enclos' }] : []),
+                  ] as { key: 'dialogue' | 'boutique' | 'enclos'; label: string }[]).map(tab => (
                     <button
-                      key={tab}
-                      className={`btn btn-sm ${activeTab === tab ? 'btn-primary' : 'btn-secondary'}`}
+                      key={tab.key}
+                      className={`btn btn-sm ${activeTab === tab.key ? 'btn-primary' : 'btn-secondary'}`}
                       style={{ borderRadius: '4px 4px 0 0', marginBottom: -1 }}
-                      onClick={() => setPnjModal(prev => prev ? { ...prev, activeTab: tab } : null)}
+                      onClick={() => setPnjModal(prev => prev ? { ...prev, activeTab: tab.key } : null)}
                     >
-                      {tab === 'dialogue' ? 'Dialogue' : 'Boutique'}
+                      {tab.label}
                     </button>
                   ))}
                 </div>
@@ -1371,6 +1520,39 @@ const MapPage: React.FC = () => {
                       </div>
                     )}
 
+                    {pnj.metiers && pnj.metiers.length > 0 && (
+                      <div style={{ marginBottom: 16 }}>
+                        <h4 style={{ margin: '0 0 8px' }}>Métiers disponibles</h4>
+                        {pnj.metiers.map(pm => {
+                          const alreadyLearned = personnageMetiers.some(p => p.metierId === pm.metierId);
+                          return (
+                            <div key={pm.id} style={{ marginBottom: 8, padding: 10, background: 'var(--card-bg)', borderRadius: 6, border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <div>
+                                <span style={{ fontWeight: 600 }}>⚒ {pm.metier.nom}</span>
+                                {pm.metier.description && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{pm.metier.description}</div>}
+                                {alreadyLearned && <span style={{ fontSize: 11, color: 'var(--success)' }}>✓ Déjà appris</span>}
+                              </div>
+                              {!alreadyLearned && (
+                                <button
+                                  className="btn btn-sm btn-primary"
+                                  onClick={async () => {
+                                    try {
+                                      await metiersApi.learnMetier(pnj.id, personnageId, pm.metierId);
+                                      const charId = isSoloMode ? character?.id : group?.leaderId;
+                                      if (charId) setPersonnageMetiers(await metiersApi.getPersonnageMetiers(charId));
+                                      setPnjFeedback(`Vous avez appris le métier "${pm.metier.nom}" !`);
+                                    } catch (err: unknown) {
+                                      setPnjFeedback((err as any)?.response?.data?.error || (err instanceof Error ? err.message : 'Erreur'));
+                                    }
+                                  }}
+                                >Apprendre</button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
                     {!hasQuestContent && !interactData.estMarchand && (
                       <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>{dialogueTexte ? '' : 'Rien de special pour l\'instant.'}</p>
                     )}
@@ -1409,7 +1591,7 @@ const MapPage: React.FC = () => {
                     {merchantTab === 'buy' && pnj.lignes && (
                       <div>
                         {pnj.lignes.map((ligne: any) => {
-                          const nom = ligne.equipement?.nom ?? ligne.ressource?.nom ?? '?';
+                          const nom = ligne.equipement?.nom ?? ligne.ressource?.nom ?? ligne.familierRace?.nom ?? '?';
                           const key = `buy-${ligne.id}`;
                           const fb = merchantFeedback[key];
                           return (
@@ -1418,6 +1600,7 @@ const MapPage: React.FC = () => {
                                 <span style={{ fontWeight: 600 }}>{nom}</span>
                                 {ligne.ressource && <span className="meta" style={{ marginLeft: 6 }}>Ressource</span>}
                                 {ligne.equipement && <span className="meta" style={{ marginLeft: 6 }}>{ligne.equipement.slot}</span>}
+                                {ligne.familierRace && <span className="meta" style={{ marginLeft: 6 }}>🐾 Familier</span>}
                               </div>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                                 {fb && <span style={{ fontSize: 12, color: fb.ok ? 'var(--success)' : 'var(--danger)' }}>{fb.msg}</span>}
@@ -1476,6 +1659,138 @@ const MapPage: React.FC = () => {
                       </div>
                     )}
                   </>
+                )}
+
+                {activeTab === 'enclos' && (
+                  <div>
+                    {enclosError && (
+                      <div style={{ fontSize: 12, color: 'var(--danger)', marginBottom: 8 }}>
+                        {enclosError}
+                        <button style={{ marginLeft: 6, background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer' }} onClick={() => setEnclosError(null)}>✕</button>
+                      </div>
+                    )}
+
+                    {/* Familiers en enclos */}
+                    {enclosData.length > 0 && (
+                      <div style={{ marginBottom: 12 }}>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6 }}>En enclos :</div>
+                        {enclosData.map(a => {
+                          const elapsed = Math.floor((Date.now() - new Date(a.debutAt).getTime()) / 60000);
+                          const done = elapsed >= a.dureeMinutes;
+                          const famNom = a.familier?.nom || a.familier?.race?.nom || `Familier #${a.familierId}`;
+                          return (
+                            <div key={a.id} style={{ padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 6, marginBottom: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ fontWeight: 600, fontSize: 13 }}>{famNom}</span>
+                                <span className={`badge badge-${done ? 'info' : 'muted'}`} style={{ fontSize: 10 }}>{a.enclosType}</span>
+                              </div>
+                              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                                {Math.min(elapsed, a.dureeMinutes)}/{a.dureeMinutes} min
+                                {a.enclosType === 'ENTRAINEMENT' && ` (+${Math.min(elapsed, a.dureeMinutes)} XP)`}
+                                {a.enclosType === 'BONHEUR' && ` (+${Math.min(elapsed, a.dureeMinutes)} bonheur)`}
+                              </div>
+                              {done && a.enclosType !== 'RENCONTRE' && (
+                                <button className="btn btn-sm btn-success" disabled={enclosLoading} onClick={async () => {
+                                  setEnclosLoading(true);
+                                  try {
+                                    await familiersApi.collect(a.familierId, personnageId);
+                                    const [newEnclos, newFams] = await Promise.all([
+                                      familiersApi.getEnclosByMap(pnj.mapId),
+                                      familiersApi.getByCharacter(personnageId),
+                                    ]);
+                                    setEnclosData(newEnclos);
+                                    setEnclosFamiliers(newFams);
+                                  } catch (e: any) {
+                                    setEnclosError(e?.response?.data?.error || 'Erreur');
+                                  } finally {
+                                    setEnclosLoading(false);
+                                  }
+                                }}>Collecter</button>
+                              )}
+                              {done && a.enclosType === 'RENCONTRE' && a.partenaireAssignmentId != null && (
+                                <button className="btn btn-sm btn-success" disabled={enclosLoading} onClick={async () => {
+                                  setEnclosLoading(true);
+                                  try {
+                                    await familiersApi.collectBreeding(a.id, personnageId);
+                                    const [newEnclos, newFams] = await Promise.all([
+                                      familiersApi.getEnclosByMap(pnj.mapId),
+                                      familiersApi.getByCharacter(personnageId),
+                                    ]);
+                                    setEnclosData(newEnclos);
+                                    setEnclosFamiliers(newFams);
+                                  } catch (e: any) {
+                                    setEnclosError(e?.response?.data?.error || 'Erreur');
+                                  } finally {
+                                    setEnclosLoading(false);
+                                  }
+                                }}>Collecter enfants</button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Formulaire dépôt */}
+                    {enclosFamiliers.filter(f => !f.enclosAssignment && !f.estEquipe).length > 0 ? (
+                      <div style={{ fontSize: 12 }}>
+                        <div style={{ fontWeight: 600, marginBottom: 6 }}>Déposer un familier :</div>
+                        <select value={enclosDeposit.famId} onChange={e => setEnclosDeposit(d => ({ ...d, famId: e.target.value ? Number(e.target.value) : '' }))} style={{ width: '100%', marginBottom: 6, fontSize: 12 }}>
+                          <option value="">-- Choisir --</option>
+                          {enclosFamiliers.filter(f => !f.enclosAssignment && !f.estEquipe).map(f => (
+                            <option key={f.id} value={f.id}>{f.nom || f.race?.nom || `#${f.id}`}</option>
+                          ))}
+                        </select>
+                        <select value={enclosDeposit.type} onChange={e => setEnclosDeposit(d => ({ ...d, type: e.target.value as EnclosType, partenaireId: '' }))} style={{ width: '100%', marginBottom: 6, fontSize: 12 }}>
+                          <option value="ENTRAINEMENT">Entraînement (+XP)</option>
+                          <option value="BONHEUR">Bonheur (+❤)</option>
+                          <option value="RENCONTRE">Rencontre (accouplement)</option>
+                        </select>
+                        {enclosDeposit.type === 'RENCONTRE' && (
+                          <select value={enclosDeposit.partenaireId} onChange={e => setEnclosDeposit(d => ({ ...d, partenaireId: e.target.value ? Number(e.target.value) : '' }))} style={{ width: '100%', marginBottom: 6, fontSize: 12 }}>
+                            <option value="">-- 2e familier --</option>
+                            {enclosFamiliers.filter(f => !f.enclosAssignment && !f.estEquipe && f.id !== Number(enclosDeposit.famId)).map(f => (
+                              <option key={f.id} value={f.id}>{f.nom || f.race?.nom || `#${f.id}`}</option>
+                            ))}
+                          </select>
+                        )}
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 8 }}>
+                          <input type="number" min={1} value={enclosDeposit.duree} onChange={e => setEnclosDeposit(d => ({ ...d, duree: Number(e.target.value) }))} style={{ width: 70, fontSize: 12 }} />
+                          <span style={{ color: 'var(--text-muted)' }}>minutes</span>
+                        </div>
+                        <button
+                          className="btn btn-sm btn-primary"
+                          style={{ width: '100%' }}
+                          disabled={enclosLoading || !enclosDeposit.famId || (enclosDeposit.type === 'RENCONTRE' && !enclosDeposit.partenaireId)}
+                          onClick={async () => {
+                            if (!enclosDeposit.famId) return;
+                            setEnclosLoading(true);
+                            setEnclosError(null);
+                            try {
+                              if (enclosDeposit.type === 'RENCONTRE' && enclosDeposit.partenaireId) {
+                                await familiersApi.startBreeding({ familierAId: Number(enclosDeposit.famId), familierBId: Number(enclosDeposit.partenaireId), mapId: pnj.mapId, dureeMinutes: enclosDeposit.duree, personnageId });
+                              } else {
+                                await familiersApi.deposit(Number(enclosDeposit.famId), { enclosType: enclosDeposit.type, mapId: pnj.mapId, dureeMinutes: enclosDeposit.duree, personnageId });
+                              }
+                              setEnclosDeposit({ famId: '', type: 'ENTRAINEMENT', duree: 60, partenaireId: '' });
+                              const [newEnclos, newFams] = await Promise.all([
+                                familiersApi.getEnclosByMap(pnj.mapId),
+                                familiersApi.getByCharacter(personnageId),
+                              ]);
+                              setEnclosData(newEnclos);
+                              setEnclosFamiliers(newFams);
+                            } catch (e: any) {
+                              setEnclosError(e?.response?.data?.error || 'Erreur');
+                            } finally {
+                              setEnclosLoading(false);
+                            }
+                          }}
+                        >Déposer</button>
+                      </div>
+                    ) : enclosData.length === 0 ? (
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Aucun familier disponible.</div>
+                    ) : null}
+                  </div>
                 )}
               </div>
             </div>

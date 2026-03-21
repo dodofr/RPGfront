@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { mapsApi, uploadApi } from '../../api/maps';
-import type { GameMap, MapConnection } from '../../types';
+import { metiersApi } from '../../api/metiers';
+import type { GameMap, MapConnection, NoeudRecolte, MapRessource } from '../../types';
 
 type CellData =
   | { type: 'spawn-player'; ordre: number }
@@ -13,9 +14,10 @@ type CellData =
 
 type ExitDir = 'nord' | 'sud' | 'est' | 'ouest';
 
-type Tool = 'spawn-player' | 'spawn-enemy' | 'obstacle-pm' | 'obstacle-los' | 'excluded' | 'premier-plan' | 'portal' | 'exit-nord' | 'exit-sud' | 'exit-est' | 'exit-ouest' | 'eraser';
+type Tool = 'spawn-player' | 'spawn-enemy' | 'obstacle-pm' | 'obstacle-los' | 'excluded' | 'premier-plan' | 'portal' | 'resource' | 'exit-nord' | 'exit-sud' | 'exit-est' | 'exit-ouest' | 'eraser';
 
 type PortalData = { nom: string };
+type ResourceData = { id?: number; noeudId: number; noeudNom: string; respawnMinutes: number };
 
 const GridEditorPage: React.FC = () => {
   const { mapId } = useParams<{ mapId: string }>();
@@ -23,6 +25,11 @@ const GridEditorPage: React.FC = () => {
   const [mapInfo, setMapInfo] = useState<GameMap | null>(null);
   const [cells, setCells] = useState<Map<string, CellData>>(new Map());
   const [portals, setPortals] = useState<Map<string, PortalData>>(new Map());
+  const [mapRessources, setMapRessources] = useState<Map<string, ResourceData>>(new Map());
+  const [originalRessources, setOriginalRessources] = useState<MapRessource[]>([]);
+  const [noeuds, setNoeuds] = useState<NoeudRecolte[]>([]);
+  const [selectedNoeudId, setSelectedNoeudId] = useState<number | ''>('');
+  const [ressourceRespawn, setRessourceRespawn] = useState(10);
   const [originalConnections, setOriginalConnections] = useState<MapConnection[]>([]);
   const [portalNom, setPortalNom] = useState('');
   const [tool, setTool] = useState<Tool>('spawn-player');
@@ -48,7 +55,30 @@ const GridEditorPage: React.FC = () => {
     Promise.all([
       mapsApi.getGrid(Number(mapId)),
       mapsApi.getById(Number(mapId)),
-    ]).then(([grid, info]) => {
+      mapsApi.getRessources(Number(mapId)),
+      metiersApi.getAll(),
+    ]).then(([grid, info, existingRessources, allMetiers]) => {
+      // Load noeuds from all métiers
+      const allNoeuds: NoeudRecolte[] = [];
+      for (const m of allMetiers) {
+        if (m.noeuds) allNoeuds.push(...m.noeuds);
+      }
+      setNoeuds(allNoeuds);
+
+      // Load existing map ressources
+      setOriginalRessources(existingRessources);
+      const initialRessources = new Map<string, ResourceData>();
+      for (const mr of existingRessources) {
+        const noeud = allNoeuds.find(n => n.id === mr.noeudId);
+        initialRessources.set(`${mr.caseX},${mr.caseY}`, {
+          id: mr.id,
+          noeudId: mr.noeudId,
+          noeudNom: noeud?.nom ?? `Nœud #${mr.noeudId}`,
+          respawnMinutes: mr.respawnMinutes,
+        });
+      }
+      setMapRessources(initialRessources);
+
       setMapInfo(info);
       setImageUrl(info.imageUrl ?? '');
       // Load exits
@@ -119,6 +149,12 @@ const GridEditorPage: React.FC = () => {
         next.delete(key);
         return next;
       });
+      setMapRessources(prev => {
+        if (!prev.has(key)) return prev;
+        const next = new Map(prev);
+        next.delete(key);
+        return next;
+      });
       setCells(prev => {
         const next = new Map(prev);
         const deleted = next.get(key);
@@ -144,6 +180,18 @@ const GridEditorPage: React.FC = () => {
       setPortals(prev => {
         const next = new Map(prev);
         next.set(key, { nom: portalNom.trim() });
+        return next;
+      });
+      return;
+    }
+
+    if (tool === 'resource') {
+      if (!selectedNoeudId) return;
+      const noeud = noeuds.find(n => n.id === selectedNoeudId);
+      if (!noeud) return;
+      setMapRessources(prev => {
+        const next = new Map(prev);
+        next.set(key, { noeudId: noeud.id, noeudNom: noeud.nom, respawnMinutes: ressourceRespawn });
         return next;
       });
       return;
@@ -175,7 +223,7 @@ const GridEditorPage: React.FC = () => {
 
       return next;
     });
-  }, [tool, portalNom]);
+  }, [tool, portalNom, selectedNoeudId, noeuds, ressourceRespawn]);
 
   const handleMouseDown = (x: number, y: number) => {
     setPainting(true);
@@ -183,7 +231,7 @@ const GridEditorPage: React.FC = () => {
   };
 
   const handleMouseEnter = (x: number, y: number) => {
-    if (painting && tool !== 'portal') applyTool(x, y);
+    if (painting && tool !== 'portal' && tool !== 'resource') applyTool(x, y);
   };
 
   const handleMouseUp = () => setPainting(false);
@@ -261,6 +309,18 @@ const GridEditorPage: React.FC = () => {
         });
       }));
 
+      // Save map ressources: delete all originals, then re-create from current state
+      await Promise.all(originalRessources.map(mr => mapsApi.removeRessource(Number(mapId), mr.id)));
+      await Promise.all([...mapRessources.entries()].map(([key, data]) => {
+        const [xStr, yStr] = key.split(',');
+        return mapsApi.addRessource(Number(mapId), {
+          noeudId: data.noeudId,
+          caseX: Number(xStr),
+          caseY: Number(yStr),
+          respawnMinutes: data.respawnMinutes,
+        });
+      }));
+
       // Save exits + imageUrl
       await mapsApi.update(Number(mapId), {
         imageUrl: imageUrl.trim() || null,
@@ -321,6 +381,7 @@ const GridEditorPage: React.FC = () => {
     { key: 'excluded', label: 'Zone exclue' },
     { key: 'premier-plan', label: 'Premier-plan' },
     { key: 'portal', label: `Portail${portals.size > 0 ? ` (${portals.size})` : ''}` },
+    { key: 'resource', label: `Ressource${mapRessources.size > 0 ? ` (${mapRessources.size})` : ''}` },
     ...(mapInfo?.nordMapId ? [{ key: 'exit-nord' as Tool, label: `Sortie N${exits.nord ? ` (${exits.nord.x},${exits.nord.y})` : ''}` }] : []),
     ...(mapInfo?.sudMapId ? [{ key: 'exit-sud' as Tool, label: `Sortie S${exits.sud ? ` (${exits.sud.x},${exits.sud.y})` : ''}` }] : []),
     ...(mapInfo?.estMapId ? [{ key: 'exit-est' as Tool, label: `Sortie E${exits.est ? ` (${exits.est.x},${exits.est.y})` : ''}` }] : []),
@@ -396,6 +457,23 @@ const GridEditorPage: React.FC = () => {
           </div>
         )}
 
+        {tool === 'resource' && (
+          <div className="portal-config">
+            <label>Nœud :</label>
+            <select value={selectedNoeudId} onChange={e => setSelectedNoeudId(e.target.value ? Number(e.target.value) : '')}>
+              <option value="">— Choisir un nœud —</option>
+              {noeuds.map(n => <option key={n.id} value={n.id}>{n.nom}</option>)}
+            </select>
+            <label>Respawn (min) :</label>
+            <input type="number" min={1} value={ressourceRespawn} onChange={e => setRessourceRespawn(Number(e.target.value))} style={{ width: 60 }} />
+            {!selectedNoeudId && (
+              <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>
+                Sélectionnez un nœud avant de cliquer sur une case.
+              </span>
+            )}
+          </div>
+        )}
+
         {(tool === 'exit-nord' || tool === 'exit-sud' || tool === 'exit-est' || tool === 'exit-ouest') && (
           <div className="portal-config">
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
@@ -414,9 +492,11 @@ const GridEditorPage: React.FC = () => {
               const key = `${x},${y}`;
               const cell = cells.get(key);
               const portal = portals.get(key);
+              const resource = mapRessources.get(key);
               const exitLabel = getExitLabel(x, y);
               let className = `grid-cell ${getCellClass(cell)}`;
               if (portal) className += ' portal-cell';
+              if (resource) className += ' resource-cell';
               if (exitLabel) className += ' exit-cell';
               return (
                 <div
@@ -425,9 +505,9 @@ const GridEditorPage: React.FC = () => {
                   onMouseDown={(e) => { e.preventDefault(); handleMouseDown(x, y); }}
                   onMouseEnter={() => handleMouseEnter(x, y)}
                   onMouseUp={handleMouseUp}
-                  title={portal ? `Portail réseau : ${portal.nom}` : exitLabel ? `Sortie ${exitLabel}` : undefined}
+                  title={portal ? `Portail réseau : ${portal.nom}` : resource ? `${resource.noeudNom} (respawn ${resource.respawnMinutes}min)` : exitLabel ? `Sortie ${exitLabel}` : undefined}
                 >
-                  {exitLabel ?? (portal ? '\uD83D\uDEAA' : getCellLabel(cell))}
+                  {exitLabel ?? (portal ? '\uD83D\uDEAA' : resource ? '\uD83C\uDF3F' : getCellLabel(cell))}
                 </div>
               );
             })
@@ -440,6 +520,17 @@ const GridEditorPage: React.FC = () => {
             {[...portals.entries()].map(([key, data]) => (
               <span key={key} className="portal-tag">
                 ({key}) — {data.nom}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {mapRessources.size > 0 && (
+          <div className="portal-list">
+            <strong>Ressources ({mapRessources.size}) :</strong>
+            {[...mapRessources.entries()].map(([key, data]) => (
+              <span key={key} className="portal-tag" style={{ background: 'rgba(139,195,74,0.2)', borderColor: 'rgba(139,195,74,0.5)' }}>
+                ({key}) — {data.noeudNom} ({data.respawnMinutes}min)
               </span>
             ))}
           </div>

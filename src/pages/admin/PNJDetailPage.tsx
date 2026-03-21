@@ -4,7 +4,9 @@ import { pnjApi } from '../../api/pnj';
 import { mapsApi, uploadApi } from '../../api/maps';
 import { equipmentApi, resourcesApi } from '../../api/static';
 import { queteApi } from '../../api/quetes';
-import type { PNJ, MarchandLigne, GameMap, Equipment, Ressource, PNJDialogue, DialogueType, Quete } from '../../types';
+import { metiersApi } from '../../api/metiers';
+import { familiersApi } from '../../api/familiers';
+import type { PNJ, MarchandLigne, GameMap, Equipment, Ressource, PNJDialogue, DialogueType, Quete, Metier, FamilierRace } from '../../types';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import '../../styles/admin.css';
 
@@ -17,6 +19,9 @@ const PNJDetailPage: React.FC = () => {
   const [equipements, setEquipements] = useState<Equipment[]>([]);
   const [ressources, setRessources] = useState<Ressource[]>([]);
   const [quetes, setQuetes] = useState<Quete[]>([]);
+  const [allMetiers, setAllMetiers] = useState<Metier[]>([]);
+  const [showAddMetier, setShowAddMetier] = useState(false);
+  const [newMetierId, setNewMetierId] = useState<number | ''>('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -28,6 +33,7 @@ const PNJDetailPage: React.FC = () => {
   const [positionY, setPositionY] = useState(0);
   const [description, setDescription] = useState('');
   const [estMarchand, setEstMarchand] = useState(false);
+  const [estGardienEnclos, setEstGardienEnclos] = useState(false);
   const [imageUrl, setImageUrl] = useState<string>('');
   const [spriteScale, setSpriteScale] = useState(1.0);
   const [spriteOffsetX, setSpriteOffsetX] = useState(0);
@@ -51,11 +57,13 @@ const PNJDetailPage: React.FC = () => {
 
   // Formulaire ajout ligne
   const [showAddLigne, setShowAddLigne] = useState(false);
-  const [ligneType, setLigneType] = useState<'equipement' | 'ressource'>('equipement');
+  const [ligneType, setLigneType] = useState<'equipement' | 'ressource' | 'familier'>('equipement');
   const [ligneEquipId, setLigneEquipId] = useState<number | ''>('');
   const [ligneResId, setLigneResId] = useState<number | ''>('');
+  const [ligneFamilierRaceId, setLigneFamilierRaceId] = useState<number | ''>('');
   const [lignePrixVente, setLignePrixVente] = useState<number | ''>('');
   const [lignePrixRachat, setLignePrixRachat] = useState<number | ''>('');
+  const [allFamilierRaces, setAllFamilierRaces] = useState<FamilierRace[]>([]);
 
   const loadPnj = useCallback(async () => {
     if (!id) return;
@@ -67,6 +75,7 @@ const PNJDetailPage: React.FC = () => {
     setPositionY(p.positionY);
     setDescription(p.description ?? '');
     setEstMarchand(p.estMarchand);
+    setEstGardienEnclos(p.estGardienEnclos ?? false);
     setImageUrl(p.imageUrl ?? '');
     setSpriteScale(p.spriteScale ?? 1.0);
     setSpriteOffsetX(p.spriteOffsetX ?? 0);
@@ -81,6 +90,8 @@ const PNJDetailPage: React.FC = () => {
       equipmentApi.getAll().then(setEquipements),
       resourcesApi.getAll().then(setRessources),
       queteApi.getAll().then(setQuetes),
+      metiersApi.getAll().then(setAllMetiers),
+      familiersApi.getAllRaces().then(setAllFamilierRaces).catch(() => {}),
     ]).finally(() => setLoading(false));
   }, [loadPnj]);
 
@@ -88,7 +99,7 @@ const PNJDetailPage: React.FC = () => {
     if (!pnj) return;
     setSaving(true);
     try {
-      await pnjApi.update(pnj.id, { nom, mapId, positionX, positionY, description: description || null, estMarchand, imageUrl: imageUrl || null, spriteScale, spriteOffsetX, spriteOffsetY });
+      await pnjApi.update(pnj.id, { nom, mapId, positionX, positionY, description: description || null, estMarchand, estGardienEnclos, imageUrl: imageUrl || null, spriteScale, spriteOffsetX, spriteOffsetY });
       await loadPnj();
     } catch (e: any) {
       setError(e?.response?.data?.error || 'Erreur lors de la sauvegarde');
@@ -111,7 +122,8 @@ const PNJDetailPage: React.FC = () => {
     };
     if (ligneType === 'equipement' && ligneEquipId) data.equipementId = Number(ligneEquipId);
     else if (ligneType === 'ressource' && ligneResId) data.ressourceId = Number(ligneResId);
-    else { setError('Sélectionnez un équipement ou une ressource'); return; }
+    else if (ligneType === 'familier' && ligneFamilierRaceId) (data as any).familierRaceId = Number(ligneFamilierRaceId);
+    else { setError('Sélectionnez un équipement, une ressource ou une race de familier'); return; }
 
     setSaving(true);
     try {
@@ -193,6 +205,31 @@ const PNJDetailPage: React.FC = () => {
     await pnjApi.deleteDialogue(pnj.id, deletingDialogue.id);
     setDeletingDialogue(null);
     await loadPnj();
+  };
+
+  const handleAddMetier = async () => {
+    if (!pnj || !newMetierId) return;
+    setSaving(true);
+    try {
+      await metiersApi.addPnjMetier(pnj.id, Number(newMetierId));
+      setShowAddMetier(false);
+      setNewMetierId('');
+      await loadPnj();
+    } catch (e: any) {
+      setError(e?.response?.data?.error || 'Erreur');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRemoveMetier = async (metierId: number) => {
+    if (!pnj) return;
+    try {
+      await metiersApi.removePnjMetier(pnj.id, metierId);
+      await loadPnj();
+    } catch (e: any) {
+      setError(e?.response?.data?.error || 'Erreur');
+    }
   };
 
   if (loading) return <div className="loading">Chargement...</div>;
@@ -291,6 +328,24 @@ const PNJDetailPage: React.FC = () => {
                     <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                       Si coché, le joueur pourra ouvrir la boutique lors de l'interaction.
                       Un PNJ peut avoir à la fois une boutique et des quêtes.
+                    </div>
+                  </div>
+                </label>
+              </div>
+
+              {/* Checkbox gardien enclos */}
+              <div style={{ padding: '10px 12px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 6 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={estGardienEnclos}
+                    onChange={e => setEstGardienEnclos(e.target.checked)}
+                    style={{ width: 16, height: 16 }}
+                  />
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>Gardien d'enclos</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                      Si coché, les joueurs pourront gérer leurs familiers en enclos via ce PNJ.
                     </div>
                   </div>
                 </label>
@@ -554,19 +609,25 @@ const PNJDetailPage: React.FC = () => {
               {showAddLigne && (
                 <div style={{ padding: 12, background: 'var(--bg)', border: '1px solid var(--primary)', borderRadius: 6, marginBottom: 12 }}>
                   <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-                    <select value={ligneType} onChange={e => { setLigneType(e.target.value as 'equipement' | 'ressource'); setLigneEquipId(''); setLigneResId(''); }} style={{ flex: '0 0 140px' }}>
+                    <select value={ligneType} onChange={e => { setLigneType(e.target.value as 'equipement' | 'ressource' | 'familier'); setLigneEquipId(''); setLigneResId(''); setLigneFamilierRaceId(''); }} style={{ flex: '0 0 140px' }}>
                       <option value="equipement">Équipement</option>
                       <option value="ressource">Ressource</option>
+                      <option value="familier">🐾 Familier</option>
                     </select>
                     {ligneType === 'equipement' ? (
                       <select value={ligneEquipId} onChange={e => setLigneEquipId(e.target.value ? Number(e.target.value) : '')} style={{ flex: 1 }}>
                         <option value="">-- choisir --</option>
                         {equipements.map(eq => <option key={eq.id} value={eq.id}>{eq.nom} ({eq.slot})</option>)}
                       </select>
-                    ) : (
+                    ) : ligneType === 'ressource' ? (
                       <select value={ligneResId} onChange={e => setLigneResId(e.target.value ? Number(e.target.value) : '')} style={{ flex: 1 }}>
                         <option value="">-- choisir --</option>
                         {ressources.map(r => <option key={r.id} value={r.id}>{r.nom}</option>)}
+                      </select>
+                    ) : (
+                      <select value={ligneFamilierRaceId} onChange={e => setLigneFamilierRaceId(e.target.value ? Number(e.target.value) : '')} style={{ flex: 1 }}>
+                        <option value="">-- choisir race --</option>
+                        {allFamilierRaces.map(r => <option key={r.id} value={r.id}>{r.nom}</option>)}
                       </select>
                     )}
                   </div>
@@ -611,6 +672,8 @@ const PNJDetailPage: React.FC = () => {
                             <span>{ligne.equipement.nom} <span className="badge badge-muted" style={{ fontSize: 10 }}>{ligne.equipement.slot}</span></span>
                           ) : ligne.ressource ? (
                             <span>{ligne.ressource.nom} <span className="badge badge-secondary" style={{ fontSize: 10 }}>Ressource</span></span>
+                          ) : ligne.familierRace ? (
+                            <span>🐾 {ligne.familierRace.nom} <span className="badge badge-info" style={{ fontSize: 10 }}>Familier</span></span>
                           ) : '—'}
                         </td>
                         <td style={{ padding: '6px 8px', textAlign: 'right' }}>
@@ -642,6 +705,52 @@ const PNJDetailPage: React.FC = () => {
             </>
           )}
         </div>
+      </div>
+
+      {/* ── Métiers enseignés ── */}
+      <div className="detail-page-section" style={{ marginTop: 16 }}>
+        <div className="detail-page-section-header">
+          <h3>Métiers enseignés</h3>
+          <button className="btn btn-primary btn-sm" onClick={() => setShowAddMetier(v => !v)}>
+            {showAddMetier ? 'Annuler' : '+ Ajouter'}
+          </button>
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>
+          Les métiers listés ici peuvent être appris par les joueurs en interagissant avec ce PNJ.
+        </div>
+
+        {showAddMetier && (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '10px 12px', background: 'var(--bg)', border: '1px solid var(--primary)', borderRadius: 6, marginBottom: 12 }}>
+            <select value={newMetierId} onChange={e => setNewMetierId(e.target.value ? Number(e.target.value) : '')} style={{ flex: 1 }}>
+              <option value="">— Choisir un métier —</option>
+              {allMetiers
+                .filter(m => !pnj.metiers?.some(pm => pm.metierId === m.id))
+                .map(m => <option key={m.id} value={m.id}>{m.nom}</option>)
+              }
+            </select>
+            <button className="btn btn-primary btn-sm" onClick={handleAddMetier} disabled={saving || !newMetierId}>
+              {saving ? '...' : 'Ajouter'}
+            </button>
+          </div>
+        )}
+
+        {(!pnj.metiers || pnj.metiers.length === 0) && !showAddMetier && (
+          <div style={{ textAlign: 'center', padding: '16px 0', color: 'var(--text-muted)', fontStyle: 'italic', fontSize: 13 }}>
+            Ce PNJ n'enseigne aucun métier.
+          </div>
+        )}
+
+        {pnj.metiers && pnj.metiers.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {pnj.metiers.map(pm => (
+              <div key={pm.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: 'rgba(139,195,74,0.12)', border: '1px solid rgba(139,195,74,0.3)', borderRadius: 6 }}>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>{pm.metier.nom}</span>
+                {pm.metier.description && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{pm.metier.description}</span>}
+                <button className="btn btn-danger btn-sm" style={{ fontSize: 10, padding: '2px 6px' }} onClick={() => handleRemoveMetier(pm.metierId)}>✕</button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* ── Confirms ── */}

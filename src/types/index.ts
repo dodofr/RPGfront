@@ -3,7 +3,7 @@ export type StatType = 'FORCE' | 'INTELLIGENCE' | 'DEXTERITE' | 'AGILITE' | 'VIE
 export type SortType = 'ARME' | 'SORT';
 export type SlotType = 'ARME' | 'COIFFE' | 'AMULETTE' | 'BOUCLIER' | 'HAUT' | 'BAS' | 'ANNEAU1' | 'ANNEAU2' | 'FAMILIER';
 export type EffetType = 'BUFF' | 'DEBUFF' | 'DISPEL' | 'POUSSEE' | 'ATTIRANCE' | 'POISON' | 'BOUCLIER' | 'RESISTANCE';
-export type ZoneType = 'CASE' | 'CROIX' | 'LIGNE' | 'CONE' | 'CERCLE' | 'LIGNE_PERPENDICULAIRE' | 'DIAGONALE' | 'CARRE' | 'ANNEAU' | 'CONE_INVERSE';
+export type ZoneType = 'CASE' | 'CROIX' | 'LIGNE' | 'CONE' | 'CERCLE' | 'LIGNE_PERPENDICULAIRE' | 'DIAGONALE' | 'CARRE' | 'ANNEAU' | 'CONE_INVERSE' | 'T_FORME';
 export type CombatStatus = 'EN_COURS' | 'TERMINE' | 'ABANDONNE';
 export type DialogueType = 'ACCUEIL' | 'SANS_INTERACTION';
 export type RegionType = 'FORET' | 'PLAINE' | 'DESERT' | 'MONTAGNE' | 'MARAIS' | 'CAVERNE' | 'CITE';
@@ -34,6 +34,11 @@ export interface Race {
   spriteScale?: number;
   spriteOffsetX?: number;
   spriteOffsetY?: number;
+  spriteScaleFemme?: number;
+  spriteOffsetXFemme?: number;
+  spriteOffsetYFemme?: number;
+  spriteConfigHomme?: import('../utils/spriteConfig').SpritesheetConfig | null;
+  spriteConfigFemme?: import('../utils/spriteConfig').SpritesheetConfig | null;
   sorts?: Sort[];
 }
 
@@ -275,6 +280,7 @@ export interface MonsterTemplate {
   spriteScale?: number;
   spriteOffsetX?: number;
   spriteOffsetY?: number;
+  spriteConfig?: import('../utils/spriteConfig').SpritesheetConfig | null;
   force: number;
   intelligence: number;
   dexterite: number;
@@ -429,6 +435,7 @@ export interface CombatEntity {
   spriteScale?: number;
   spriteOffsetX?: number;
   spriteOffsetY?: number;
+  spriteConfig?: import('../utils/spriteConfig').SpritesheetConfig | null;
   sorts?: Sort[];
 }
 
@@ -543,11 +550,13 @@ export interface MonstreDrop {
   monstreId: number;
   ressourceId: number | null;
   equipementId: number | null;
+  familierRaceId?: number | null;
   tauxDrop: number;
   quantiteMin: number;
   quantiteMax: number;
   ressource?: Ressource | null;
   equipement?: Equipment | null;
+  familierRace?: { id: number; nom: string } | null;
 }
 
 export interface Panoplie {
@@ -582,6 +591,10 @@ export interface Recette {
   equipement?: Equipment;
   niveauMinimum: number;
   coutOr: number;
+  metierId?: number | null;
+  metier?: { id: number; nom: string } | null;
+  niveauMetierRequis?: number;
+  xpCraft?: number;
   ingredients?: RecetteIngredient[];
 }
 
@@ -677,6 +690,8 @@ export interface MarchandLigne {
   equipement?: { id: number; nom: string; slot: string } | null;
   ressourceId?: number | null;
   ressource?: { id: number; nom: string } | null;
+  familierRaceId?: number | null;
+  familierRace?: { id: number; nom: string } | null;
   prixMarchand?: number | null;
   prixRachat?: number | null;
 }
@@ -694,9 +709,11 @@ export interface PNJ {
   positionX: number;
   positionY: number;
   estMarchand: boolean;
+  estGardienEnclos?: boolean;
   lignes: MarchandLigne[];
   dialogues?: PNJDialogue[];
   quetesDepart?: { id: number; nom: string; niveauRequis: number }[];
+  metiers?: PnjMetier[];
 }
 
 // ============ Quêtes ============
@@ -774,6 +791,72 @@ export interface AdvanceQuestResponse {
   };
 }
 
+// ============ Métiers ============
+
+export interface Metier {
+  id: number;
+  nom: string;
+  description?: string | null;
+  type: 'RECOLTE' | 'CRAFT';
+  noeuds?: NoeudRecolte[];
+  recettes?: { id: number; nom: string; niveauMetierRequis: number; xpCraft: number }[];
+}
+
+export interface PersonnageMetier {
+  id: number;
+  personnageId: number;
+  metierId: number;
+  metier: Metier;
+  niveau: number;
+  xp: number;
+  xpRequis: number;
+}
+
+export interface NoeudRessource {
+  id: number;
+  noeudId: number;
+  niveauRequis: number;
+  ressourceId: number;
+  ressource?: Ressource;
+  quantiteMin: number;
+  quantiteMax: number;
+  tauxDrop: number;
+}
+
+export interface NoeudRecolte {
+  id: number;
+  nom: string;
+  imageUrl?: string | null;
+  metierId: number;
+  metier?: Metier;
+  niveauMinAcces: number;
+  xpRecolte: number;
+  ressources?: NoeudRessource[];
+}
+
+export interface MapRessource {
+  id: number;
+  mapId: number;
+  caseX: number;
+  caseY: number;
+  noeudId: number;
+  noeud: NoeudRecolte;
+  respawnMinutes: number;
+  lastHarvestAt?: string | null;
+}
+
+export interface HarvestResult {
+  loot: { ressource: { id: number; nom: string }; quantite: number }[];
+  metier: { nom: string; niveau: number; xp: number; xpRequis: number; levelUp: boolean };
+}
+
+export interface PnjMetier {
+  id: number;
+  pnjId: number;
+  metierId: number;
+  metier: Metier;
+}
+
 export interface CompetencePassive {
   id: number;
   nom: string;
@@ -791,4 +874,78 @@ export interface CompetencePassive {
   bonusCritique: number;
   bonusDommages: number;
   bonusSoins: number;
+}
+
+// ============ Familiers ============
+
+export type EnclosType = 'ENTRAINEMENT' | 'BONHEUR' | 'RENCONTRE';
+
+export interface FamilierFamille {
+  id: number;
+  nom: string;
+  races?: FamilierRace[];
+}
+
+export interface FamilierRace {
+  id: number;
+  nom: string;
+  familleId: number;
+  famille?: FamilierFamille;
+  imageUrl?: string | null;
+  spriteScale: number;
+  spriteOffsetX: number;
+  spriteOffsetY: number;
+  generation: number;
+  baseForce: number; baseIntelligence: number; baseDexterite: number;
+  baseAgilite: number; baseVie: number; baseChance: number;
+  basePA: number; basePM: number; basePO: number;
+  baseCritique: number; baseDommages: number; baseSoins: number;
+  croissanceForce: number; croissanceIntelligence: number; croissanceDexterite: number;
+  croissanceAgilite: number; croissanceVie: number; croissanceChance: number;
+  croissancePA: number; croissancePM: number; croissancePO: number;
+  croissanceCritique: number; croissanceDommages: number; croissanceSoins: number;
+  croisementsA?: FamilierCroisement[];
+  croisementsB?: FamilierCroisement[];
+}
+
+export interface FamilierCroisement {
+  id: number;
+  raceAId: number;
+  raceBId: number;
+  raceEnfantId: number;
+  probabilite: number;
+  raceA?: FamilierRace;
+  raceB?: FamilierRace;
+  raceEnfant?: FamilierRace;
+}
+
+export interface FamilierEnclosAssignment {
+  id: number;
+  familierId: number;
+  enclosType: EnclosType;
+  mapId: number;
+  debutAt: string;
+  dureeMinutes: number;
+  partenaireAssignmentId?: number | null;
+  familier?: Familier;
+}
+
+export interface Familier {
+  id: number;
+  nom?: string | null;
+  raceId: number;
+  race?: FamilierRace;
+  personnageId: number;
+  niveau: number;
+  xp: number;
+  bonheur: number;
+  statForce: number; statIntelligence: number; statDexterite: number;
+  statAgilite: number; statVie: number; statChance: number;
+  statPA: number; statPM: number; statPO: number;
+  statCritique: number; statDommages: number; statSoins: number;
+  estEquipe: boolean;
+  enclosAssignment?: FamilierEnclosAssignment | null;
+  parentAId?: number | null;
+  parentBId?: number | null;
+  createdAt: string;
 }

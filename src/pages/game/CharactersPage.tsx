@@ -5,7 +5,9 @@ import { playersApi } from '../../api/players';
 import { groupsApi } from '../../api/groups';
 import { racesApi, equipmentApi, passivesApi } from '../../api/static';
 import { queteApi } from '../../api/quetes';
-import type { Character, Player, Race, Sort, Equipment, SlotType, InventoryState, Recette, MapType, CompetencePassive, QuetePersonnage } from '../../types';
+import { metiersApi } from '../../api/metiers';
+import { familiersApi } from '../../api/familiers';
+import type { Character, Player, Race, Sort, Equipment, SlotType, InventoryState, Recette, MapType, CompetencePassive, QuetePersonnage, PersonnageMetier, Familier } from '../../types';
 import FormModal, { type FieldDef } from '../../components/FormModal';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { SPRITE_CONFIG } from '../../utils/spriteConfig';
@@ -57,7 +59,7 @@ const STAT_ABBR: Record<string, string> = {
 const ZONE_ABBR: Record<string, string> = {
   CASE: 'Case', CROIX: 'Croix', LIGNE: 'Ligne', CONE: 'Cône',
   CERCLE: 'Cercle', LIGNE_PERPENDICULAIRE: 'L.Perp', DIAGONALE: 'Diag',
-  CARRE: 'Carré', ANNEAU: 'Anneau', CONE_INVERSE: 'Cône inv.',
+  CARRE: 'Carré', ANNEAU: 'Anneau', CONE_INVERSE: 'Cône inv.', T_FORME: 'T',
 };
 
 const SLOTS: { key: SlotType; label: string }[] = [
@@ -112,6 +114,10 @@ const CharactersPage: React.FC<CharactersPageProps> = ({ playerId: playerIdProp 
   const [recipes, setRecipes] = useState<Recette[]>([]);
   const [passives, setPassives] = useState<CompetencePassive[]>([]);
   const [activeQuests, setActiveQuests] = useState<QuetePersonnage[]>([]);
+  const [charMetiers, setCharMetiers] = useState<PersonnageMetier[]>([]);
+  const [charFamiliers, setCharFamiliers] = useState<Familier[]>([]);
+  const [renamingFamilier, setRenamingFamilier] = useState<Familier | null>(null);
+  const [renameNom, setRenameNom] = useState('');
   const [mapType, setMapType] = useState<MapType | null>(null);
   const [craftingId, setCraftingId] = useState<number | null>(null);
   const [craftMessage, setCraftMessage] = useState<string | null>(null);
@@ -172,8 +178,14 @@ const CharactersPage: React.FC<CharactersPageProps> = ({ playerId: playerIdProp 
     setCraftingId(recetteId);
     setCraftMessage(null);
     try {
-      await charactersApi.craft(selected.id, recetteId);
-      setCraftMessage('Craft reussi !');
+      const result = await charactersApi.craft(selected.id, recetteId) as { item: unknown; metierProgression?: { nom: string; niveau: number; xp: number; xpRequis: number; levelUp: boolean } | null };
+      let msg = 'Craft reussi !';
+      if (result.metierProgression) {
+        const mp = result.metierProgression;
+        msg += ` +${mp.xpRequis - mp.xp} XP ${mp.nom}`;
+        if (mp.levelUp) msg += ` (Niveau ${mp.niveau} !)`;
+      }
+      setCraftMessage(msg);
       await selectChar(selected.id);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Erreur lors du craft';
@@ -187,6 +199,11 @@ const CharactersPage: React.FC<CharactersPageProps> = ({ playerId: playerIdProp 
     if (!selected || !inventory) return false;
     if (selected.niveau < recipe.niveauMinimum) return false;
     if (inventory.or < recipe.coutOr) return false;
+    // Check métier
+    if (recipe.metierId) {
+      const pm = charMetiers.find(m => m.metierId === recipe.metierId);
+      if (!pm || pm.niveau < (recipe.niveauMetierRequis ?? 1)) return false;
+    }
     // Check ingredients
     if (recipe.ingredients) {
       for (const ing of recipe.ingredients) {
@@ -203,16 +220,20 @@ const CharactersPage: React.FC<CharactersPageProps> = ({ playerId: playerIdProp 
   };
 
   const selectChar = async (id: number) => {
-    const [c, s, inv, quests] = await Promise.all([
+    const [c, s, inv, quests, metiers, familiers] = await Promise.all([
       charactersApi.getById(id),
       charactersApi.getSpells(id),
       charactersApi.getInventory(id).catch(() => null),
       queteApi.getActiveQuests(id).catch(() => []),
+      metiersApi.getPersonnageMetiers(id).catch(() => []),
+      familiersApi.getByCharacter(id).catch(() => []),
     ]);
     setSelected(c);
     setSpells(s as Sort[]);
     setInventory(inv);
     setActiveQuests(quests);
+    setCharMetiers(metiers);
+    setCharFamiliers(familiers);
   };
 
   const handleEquipItem = async (itemId: number) => {
@@ -355,10 +376,12 @@ const CharactersPage: React.FC<CharactersPageProps> = ({ playerId: playerIdProp 
           {/* Image du personnage (calculée depuis la race) */}
           {selected.imageUrl && (() => {
             const CELL = 100;
-            const scale = selected.race?.spriteScale ?? 1;
-            const offsetX = selected.race?.spriteOffsetX ?? 0;
-            const offsetY = selected.race?.spriteOffsetY ?? 0;
-            const config = SPRITE_CONFIG[selected.imageUrl];
+            const isFemme = selected.sexe === 'FEMME';
+            const scale = isFemme ? (selected.race?.spriteScaleFemme ?? selected.race?.spriteScale ?? 1) : (selected.race?.spriteScale ?? 1);
+            const offsetX = isFemme ? (selected.race?.spriteOffsetXFemme ?? selected.race?.spriteOffsetX ?? 0) : (selected.race?.spriteOffsetX ?? 0);
+            const offsetY = isFemme ? (selected.race?.spriteOffsetYFemme ?? selected.race?.spriteOffsetY ?? 0) : (selected.race?.spriteOffsetY ?? 0);
+            const dbConfig = isFemme ? (selected.race?.spriteConfigFemme ?? selected.race?.spriteConfigHomme) : selected.race?.spriteConfigHomme;
+            const config = dbConfig ?? SPRITE_CONFIG[selected.imageUrl];
             const displayHeight = 1.4 * scale * CELL;
 
             return (
@@ -848,8 +871,141 @@ const CharactersPage: React.FC<CharactersPageProps> = ({ playerId: playerIdProp 
             </>
           )}
 
+          {/* Métiers */}
+          {selected && charMetiers.length > 0 && (
+            <>
+              <h3 className="section-title">Métiers ({charMetiers.length})</h3>
+              <div className="sort-list">
+                {charMetiers.map(pm => (
+                  <div key={pm.id} className="sort-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 4 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span className="sort-name">⚒ {pm.metier.nom}</span>
+                      <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Niveau {pm.niveau}</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                      XP : {pm.xp} / {pm.xpRequis}
+                    </div>
+                    <div style={{ height: 4, background: 'var(--border)', borderRadius: 2, overflow: 'hidden' }}>
+                      <div style={{ width: `${Math.min(100, (pm.xp / pm.xpRequis) * 100)}%`, height: '100%', background: 'var(--success)', transition: 'width 0.3s' }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {/* Familiers */}
+          {selected && charFamiliers.length > 0 && (
+            <>
+              <h3 className="section-title">Familiers ({charFamiliers.length})</h3>
+              <div className="sort-list">
+                {charFamiliers.map(fam => {
+                  const displayNom = fam.nom || fam.race?.nom || `Familier #${fam.id}`;
+                  const xpRequis = fam.niveau * 100;
+                  const bonheurColor = fam.bonheur < 30 ? 'var(--danger)' : fam.bonheur < 60 ? '#ff9800' : 'var(--success)';
+                  const isRenaming = renamingFamilier?.id === fam.id;
+                  return (
+                    <div key={fam.id} className="sort-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          {fam.race?.imageUrl && (
+                            <img src={fam.race.imageUrl} alt="" style={{ height: 28, width: 'auto' }} />
+                          )}
+                          <span className="sort-name">
+                            🐾 {displayNom}
+                            {fam.estEquipe && <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--success)' }}>✓ Équipé</span>}
+                            {fam.enclosAssignment && <span style={{ marginLeft: 6, fontSize: 11, color: '#ff9800' }}>⏳ Enclos</span>}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          {!fam.enclosAssignment && (
+                            <button
+                              className="btn btn-sm btn-secondary"
+                              style={{ fontSize: 10, padding: '2px 6px' }}
+                              onClick={async () => {
+                                if (fam.estEquipe) {
+                                  await familiersApi.unequip(fam.personnageId);
+                                } else {
+                                  await familiersApi.equip(fam.personnageId, fam.id);
+                                }
+                                setCharFamiliers(await familiersApi.getByCharacter(fam.personnageId));
+                              }}
+                            >
+                              {fam.estEquipe ? 'Déséquiper' : 'Équiper'}
+                            </button>
+                          )}
+                          <button
+                            className="btn btn-sm btn-secondary"
+                            style={{ fontSize: 10, padding: '2px 6px' }}
+                            onClick={() => {
+                              if (isRenaming) { setRenamingFamilier(null); }
+                              else { setRenamingFamilier(fam); setRenameNom(fam.nom ?? ''); }
+                            }}
+                          >✏</button>
+                        </div>
+                      </div>
+
+                      {/* Renaming inline */}
+                      {isRenaming && (
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                          <input
+                            value={renameNom}
+                            onChange={e => setRenameNom(e.target.value)}
+                            placeholder="Nouveau nom..."
+                            style={{ flex: 1, fontSize: 12 }}
+                            autoFocus
+                          />
+                          <button
+                            className="btn btn-sm btn-primary"
+                            style={{ fontSize: 10 }}
+                            onClick={async () => {
+                              await familiersApi.rename(fam.id, fam.personnageId, renameNom);
+                              setRenamingFamilier(null);
+                              setCharFamiliers(await familiersApi.getByCharacter(fam.personnageId));
+                            }}
+                          >OK</button>
+                          <button className="btn btn-sm btn-secondary" style={{ fontSize: 10 }} onClick={() => setRenamingFamilier(null)}>✕</button>
+                        </div>
+                      )}
+
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                        <span>{fam.race?.nom ?? ''}</span>
+                        <span>Gén.{fam.race?.generation ?? '?'}</span>
+                        <span>Niv.{fam.niveau}</span>
+                        <span>XP : {fam.xp}/{xpRequis}</span>
+                        <span style={{ color: bonheurColor }}>❤ {fam.bonheur}/100</span>
+                      </div>
+                      {/* XP bar */}
+                      <div style={{ height: 4, background: 'var(--border)', borderRadius: 2, overflow: 'hidden' }}>
+                        <div style={{ width: `${Math.min(100, (fam.xp / xpRequis) * 100)}%`, height: '100%', background: 'var(--success)', transition: 'width 0.3s' }} />
+                      </div>
+                      {/* Bonheur bar */}
+                      <div style={{ height: 3, background: 'var(--border)', borderRadius: 2, overflow: 'hidden' }}>
+                        <div style={{ width: `${fam.bonheur}%`, height: '100%', background: bonheurColor, transition: 'width 0.3s' }} />
+                      </div>
+                      {/* Stats */}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 2, fontSize: 10 }}>
+                        {([
+                          ['FOR', fam.statForce], ['INT', fam.statIntelligence], ['DEX', fam.statDexterite],
+                          ['AGI', fam.statAgilite], ['VIE', fam.statVie], ['CHA', fam.statChance],
+                        ] as [string, number][]).map(([label, val]) => (
+                          <div key={label} style={{ textAlign: 'center', background: 'rgba(255,255,255,0.04)', borderRadius: 3, padding: '2px 0' }}>
+                            <div style={{ color: 'var(--text-muted)' }}>{label}</div>
+                            <div>{val}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+
           {/* Craft Section — only in VILLE/SAFE */}
-          {canCraftInTown && inventory && recipes.length > 0 && (
+          {canCraftInTown && inventory && (() => {
+            const craftableRecipes = recipes.filter(r => r.metierId && charMetiers.some(m => m.metierId === r.metierId));
+            return craftableRecipes.length > 0 && (
             <>
               <h3 className="section-title">Craft</h3>
               {craftMessage && (
@@ -860,7 +1016,7 @@ const CharactersPage: React.FC<CharactersPageProps> = ({ playerId: playerIdProp 
                 </div>
               )}
               <div className="sort-list">
-                {recipes.map(recipe => {
+                {craftableRecipes.map(recipe => {
                   const canCraft = checkRecipeCanCraft(recipe);
                   const levelOk = selected ? selected.niveau >= recipe.niveauMinimum : false;
                   const orOk = inventory.or >= recipe.coutOr;
@@ -876,6 +1032,15 @@ const CharactersPage: React.FC<CharactersPageProps> = ({ playerId: playerIdProp 
                           )}
                         </div>
                         <div className="sort-meta">
+                          {recipe.metier && (() => {
+                            const pm = charMetiers.find(m => m.metierId === recipe.metierId);
+                            const metierOk = !!pm && pm.niveau >= (recipe.niveauMetierRequis ?? 1);
+                            return (
+                              <span style={{ color: metierOk ? 'var(--success)' : 'var(--danger)' }}>
+                                {recipe.metier.nom} niv.{recipe.niveauMetierRequis ?? 1}
+                              </span>
+                            );
+                          })()}
                           <span style={{ color: levelOk ? 'var(--success)' : 'var(--danger)' }}>
                             Niv. {recipe.niveauMinimum}
                           </span>
@@ -911,7 +1076,8 @@ const CharactersPage: React.FC<CharactersPageProps> = ({ playerId: playerIdProp 
                 })}
               </div>
             </>
-          )}
+            );
+          })()}
         </div>
       )}
 

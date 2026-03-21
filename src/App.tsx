@@ -23,6 +23,8 @@ import ImportPage from './pages/admin/ImportPage'
 import QuetesPage from './pages/admin/QuetesPage'
 import QueteDetailPage from './pages/admin/QueteDetailPage'
 import RaceDetailPage from './pages/admin/RaceDetailPage'
+import MetiersPage from './pages/admin/MetiersPage'
+import FamiliersAdminPage from './pages/admin/FamiliersAdminPage'
 
 // Game pages
 import PlayersPage from './pages/game/PlayersPage'
@@ -66,6 +68,8 @@ const router = createBrowserRouter([
       { path: 'quetes', element: <QuetesPage /> },
       { path: 'quetes/:id', element: <QueteDetailPage /> },
       { path: 'races/:id', element: <RaceDetailPage /> },
+      { path: 'metiers', element: <MetiersPage /> },
+      { path: 'familiers', element: <FamiliersAdminPage /> },
     ],
   },
 ])

@@ -93,6 +93,7 @@ const ZONE_LABELS: Record<string, string> = {
   CARRE: 'Carré',
   ANNEAU: 'Anneau',
   CONE_INVERSE: 'Cône inv.',
+  T_FORME: 'Forme en T',
 };
 
 const RESIST_STATS = [
@@ -370,7 +371,7 @@ const CombatPage: React.FC = () => {
     if (!currentEntity || !isPlayerTurn) return new Set<string>();
     if (!selectedSort && !weaponMode) return new Set<string>();
 
-    const porteeModifiable = selectedSort ? (selectedSort.porteeModifiable !== false) : true;
+    const porteeModifiable = selectedSort ? (selectedSort.porteeModifiable !== false) : false;
     const poBonus = porteeModifiable ? (currentEntity.poBonus ?? 0) : 0;
     const porteeMin = Math.max(0, (selectedSort ? selectedSort.porteeMin : armeData?.porteeMin ?? 1) - poBonus);
     const porteeMax = (selectedSort ? selectedSort.porteeMax : armeData?.porteeMax ?? 1) + poBonus;
@@ -449,7 +450,7 @@ const CombatPage: React.FC = () => {
       return new Set<string>();
     }
 
-    const blockedPorteeModifiable = selectedSort ? (selectedSort.porteeModifiable !== false) : true;
+    const blockedPorteeModifiable = selectedSort ? (selectedSort.porteeModifiable !== false) : false;
     const blockedPoBonus = blockedPorteeModifiable ? (currentEntity.poBonus ?? 0) : 0;
     const porteeMin = Math.max(0, (selectedSort ? selectedSort.porteeMin : armeData?.porteeMin ?? 1) - blockedPoBonus);
     const porteeMax = (selectedSort ? selectedSort.porteeMax : armeData?.porteeMax ?? 1) + blockedPoBonus;
@@ -880,6 +881,7 @@ const CombatPage: React.FC = () => {
                             imageUrl={entity.imageUrl}
                             animState={entity.pvActuels <= 0 ? 'death' : (entityAnimStates.get(entity.id) ?? 'idle')}
                             displayHeight={1.4 * (entity.spriteScale ?? 1) * cellH}
+                            configOverride={entity.spriteConfig ?? undefined}
                             style={{
                               position: 'absolute',
                               bottom: `${(entity.spriteOffsetY ?? 0) / 100 * cellH}px`,

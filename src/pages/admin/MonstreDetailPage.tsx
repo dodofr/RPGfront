@@ -3,8 +3,13 @@ import { useParams, useNavigate } from 'react-router-dom';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { monstresApi, regionsApi, uploadApi } from '../../api/maps';
 import { sortsApi, equipmentApi, resourcesApi } from '../../api/static';
-import type { MonsterTemplate, Sort, Equipment, Ressource, Region, IAType } from '../../types';
+import { familiersApi } from '../../api/familiers';
+import type { MonsterTemplate, Sort, Equipment, Ressource, Region, IAType, FamilierRace } from '../../types';
+import { type SpritesheetConfig } from '../../utils/spriteConfig';
+import SpriteAnimEditor from '../../components/SpriteAnimEditor';
 import '../../styles/admin.css';
+
+type MonstreTab = 'identite' | 'stats' | 'visuel' | 'combat';
 
 const IA_OPTIONS: { value: IAType; label: string }[] = [
   { value: 'EQUILIBRE', label: 'Equilibre' },
@@ -20,6 +25,9 @@ const MonstreDetailPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [activeTab, setActiveTab] = useState<MonstreTab>(() =>
+    (localStorage.getItem('admin-monstre-tab') as MonstreTab) ?? 'identite'
+  );
 
   // Référentiels
   const [allSorts, setAllSorts] = useState<Sort[]>([]);
@@ -27,9 +35,15 @@ const MonstreDetailPage: React.FC = () => {
   const [allResources, setAllResources] = useState<Ressource[]>([]);
   const [allRegions, setAllRegions] = useState<Region[]>([]);
 
-  // Champs éditables (stats)
+  // Identité
   const [nom, setNom] = useState('');
   const [iaType, setIaType] = useState<IAType>('EQUILIBRE');
+  const [imageUrl, setImageUrl] = useState<string>('');
+  const [uploading, setUploading] = useState(false);
+  const [imageError, setImageError] = useState<string>('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Stats
   const [stats, setStats] = useState({
     force: 10, intelligence: 10, dexterite: 10, agilite: 10,
     vie: 10, chance: 10, pvBase: 50, paBase: 6, pmBase: 3, niveauBase: 1,
@@ -46,29 +60,32 @@ const MonstreDetailPage: React.FC = () => {
   const [addSortPrio, setAddSortPrio] = useState<number>(1);
 
   // Drops
-  const [dropType, setDropType] = useState<'ressource' | 'equipement'>('ressource');
+  const [dropType, setDropType] = useState<'ressource' | 'equipement' | 'familier'>('ressource');
   const [dropTargetId, setDropTargetId] = useState<number>(0);
   const [dropRate, setDropRate] = useState<number>(0.3);
   const [dropMin, setDropMin] = useState<number>(1);
   const [dropMax, setDropMax] = useState<number>(1);
+  const [allFamilierRaces, setAllFamilierRaces] = useState<FamilierRace[]>([]);
 
   // Régions
   const [addRegionId, setAddRegionId] = useState<number>(0);
   const [addRegionProba, setAddRegionProba] = useState<number>(0.5);
 
-  // Image + sprite
-  const [imageUrl, setImageUrl] = useState<string>('');
+  // Visuel
   const [spriteScale, setSpriteScale] = useState<number>(1.0);
   const [spriteOffsetX, setSpriteOffsetX] = useState<number>(0);
   const [spriteOffsetY, setSpriteOffsetY] = useState<number>(0);
-  const [uploading, setUploading] = useState(false);
-  const [imageError, setImageError] = useState<string>('');
   const [savingSprite, setSavingSprite] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [monstreSpriteConfig, setMonstreSpriteConfig] = useState<SpritesheetConfig | null>(null);
 
   const isInvocation = monstre
     ? (monstre.pvScalingInvocation !== null || monstre.xpRecompense === 0)
     : false;
+
+  const switchTab = (tab: MonstreTab) => {
+    setActiveTab(tab);
+    localStorage.setItem('admin-monstre-tab', tab);
+  };
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -82,6 +99,7 @@ const MonstreDetailPage: React.FC = () => {
       setSpriteScale(data.spriteScale ?? 1.0);
       setSpriteOffsetX(data.spriteOffsetX ?? 0);
       setSpriteOffsetY(data.spriteOffsetY ?? 0);
+      setMonstreSpriteConfig((data.spriteConfig as SpritesheetConfig | null) ?? null);
       setStats({
         force: data.force, intelligence: data.intelligence, dexterite: data.dexterite,
         agilite: data.agilite, vie: data.vie, chance: data.chance,
@@ -102,24 +120,16 @@ const MonstreDetailPage: React.FC = () => {
 
   useEffect(() => {
     load();
-    Promise.all([sortsApi.getAll(), equipmentApi.getAll(), resourcesApi.getAll(), regionsApi.getAll()])
-      .then(([s, e, r, reg]) => { setAllSorts(s); setAllEquipment(e); setAllResources(r); setAllRegions(reg); });
+    Promise.all([sortsApi.getAll(), equipmentApi.getAll(), resourcesApi.getAll(), regionsApi.getAll(), familiersApi.getAllRaces().catch(() => [])])
+      .then(([s, e, r, reg, fr]) => { setAllSorts(s); setAllEquipment(e); setAllResources(r); setAllRegions(reg); setAllFamilierRaces(fr); });
   }, [load]);
 
-  const handleSaveBase = async () => {
+  const handleSaveIdentite = async () => {
     if (!monstre) return;
     setSaving(true);
     await monstresApi.update(monstre.id, { nom, iaType, imageUrl: imageUrl || null });
     await load();
     setSaving(false);
-  };
-
-  const handleSaveSprite = async () => {
-    if (!monstre) return;
-    setSavingSprite(true);
-    await monstresApi.update(monstre.id, { spriteScale, spriteOffsetX, spriteOffsetY });
-    await load();
-    setSavingSprite(false);
   };
 
   const handleSaveStats = async () => {
@@ -148,6 +158,14 @@ const MonstreDetailPage: React.FC = () => {
     setSaving(false);
   };
 
+  const handleSaveSprite = async () => {
+    if (!monstre) return;
+    setSavingSprite(true);
+    await monstresApi.update(monstre.id, { spriteScale, spriteOffsetX, spriteOffsetY });
+    await load();
+    setSavingSprite(false);
+  };
+
   const handleAddSort = async () => {
     if (!monstre || !addSortId) return;
     await monstresApi.addSort(monstre.id, { sortId: addSortId, priorite: addSortPrio });
@@ -165,7 +183,8 @@ const MonstreDetailPage: React.FC = () => {
     if (!monstre || !dropTargetId) return;
     const data: Record<string, unknown> = { tauxDrop: dropRate, quantiteMin: dropMin, quantiteMax: dropMax };
     if (dropType === 'ressource') data.ressourceId = dropTargetId;
-    else data.equipementId = dropTargetId;
+    else if (dropType === 'equipement') data.equipementId = dropTargetId;
+    else data.familierRaceId = dropTargetId;
     await monstresApi.addDrop(monstre.id, data as any);
     setDropTargetId(0);
     await load();
@@ -203,182 +222,192 @@ const MonstreDetailPage: React.FC = () => {
 
   return (
     <div className="admin-page">
-      {/* En-tête */}
+      {/* En-tête simplifié */}
       <div className="detail-page-header">
         <button className="btn btn-sm btn-secondary" onClick={() => navigate('/admin/entites')}>
           ← Retour
         </button>
         <div className="detail-page-title">
-          <input
-            className="detail-page-name-input"
-            value={nom}
-            onChange={e => setNom(e.target.value)}
-          />
+          <input className="detail-page-name-input" value={nom} onChange={e => setNom(e.target.value)} />
           <span className="badge badge-muted">ID {monstre.id}</span>
           {isInvocation
             ? <span className="badge badge-warning">Invocation</span>
             : <span className="badge badge-danger">Ennemi</span>}
-          <span className="badge badge-info">PV max calculé : {pvMax}</span>
+          <span className="badge badge-info">PV max : {pvMax}</span>
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <select
-            value={iaType}
-            onChange={e => setIaType(e.target.value as IAType)}
-            style={{ padding: '4px 8px', background: 'var(--bg-light)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontSize: 13 }}
-          >
-            {IA_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-            <input
-              type="text"
-              value={imageUrl}
-              onChange={e => setImageUrl(e.target.value)}
-              placeholder="Image URL..."
-              style={{ width: 160, fontSize: 12, padding: '3px 6px' }}
-            />
-            <button
-              className="btn btn-sm btn-secondary"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploading}
-              title="Importer une image"
-            >
-              {uploading ? '...' : '📁'}
-            </button>
-            {imageUrl && <img src={imageUrl} alt="preview" style={{ height: 28, borderRadius: 3, border: '1px solid var(--border)' }} />}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              style={{ display: 'none' }}
-              onChange={async e => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                setUploading(true);
-                setImageError('');
-                try {
-                  const { url } = await uploadApi.entityImage(file, 'monsters');
-                  setImageUrl(url);
-                } catch (err: any) {
-                  setImageError(err?.response?.data?.error || 'Erreur upload');
-                } finally {
-                  setUploading(false);
-                  e.target.value = '';
-                }
-              }}
-            />
-          </div>
-          {imageError && <span style={{ fontSize: 11, color: 'var(--danger)' }}>{imageError}</span>}
-          <button className="btn btn-primary btn-sm" onClick={handleSaveBase} disabled={saving}>
-            Sauvegarder nom / IA
+        <button className="btn btn-sm btn-danger" onClick={() => setDeleting(true)}>
+          Supprimer
+        </button>
+      </div>
+
+      {/* Onglets */}
+      <div className="tabs" style={{ padding: '0 16px' }}>
+        <button className={`tab-btn${activeTab === 'identite' ? ' active' : ''}`} onClick={() => switchTab('identite')}>
+          Identité
+        </button>
+        <button className={`tab-btn${activeTab === 'stats' ? ' active' : ''}`} onClick={() => switchTab('stats')}>
+          Stats
+        </button>
+        <button className={`tab-btn${activeTab === 'visuel' ? ' active' : ''}`} onClick={() => switchTab('visuel')}>
+          Visuel
+        </button>
+        {!isInvocation && (
+          <button className={`tab-btn${activeTab === 'combat' ? ' active' : ''}`} onClick={() => switchTab('combat')}>
+            Combat
           </button>
-          <button className="btn btn-sm btn-danger" onClick={() => setDeleting(true)}>
-            Supprimer
-          </button>
-        </div>
+        )}
       </div>
 
       <div className="detail-page-body">
-        {/* Stats */}
-        <div className="detail-page-section">
-          <div className="detail-page-section-header">
-            <h3>Stats</h3>
-            <button className="btn btn-sm btn-primary" onClick={handleSaveStats} disabled={saving}>Sauvegarder</button>
-          </div>
-          <div className="detail-page-fields">
-            {(Object.entries(stats) as [keyof typeof stats, number][]).map(([key, val]) => (
-              <div key={key} className="detail-page-field">
-                <label>{key}</label>
-                <input
-                  type="number"
-                  value={val}
-                  min={0}
-                  onChange={e => setStats(p => ({ ...p, [key]: Number(e.target.value) }))}
-                />
-              </div>
-            ))}
-          </div>
-        </div>
 
-        {/* Récompenses */}
-        <div className="detail-page-section">
-          <div className="detail-page-section-header">
-            <h3>{isInvocation ? 'Paramètres invocation' : 'Récompenses'}</h3>
-            <button className="btn btn-sm btn-primary" onClick={handleSaveRewards} disabled={saving}>Sauvegarder</button>
-          </div>
-          <div className="detail-page-fields">
-            {!isInvocation && (
-              <div className="detail-page-field">
-                <label>XP récompense</label>
-                <input type="number" min={0} value={rewards.xpRecompense}
-                  onChange={e => setRewards(p => ({ ...p, xpRecompense: Number(e.target.value) }))} />
-              </div>
-            )}
-            <div className="detail-page-field">
-              <label>Or min</label>
-              <input type="number" min={0} value={rewards.orMin}
-                onChange={e => setRewards(p => ({ ...p, orMin: Number(e.target.value) }))} />
+        {/* ── Onglet Identité ── */}
+        {activeTab === 'identite' && (
+          <div className="detail-page-section">
+            <div className="detail-page-section-header">
+              <h3>Identité</h3>
+              <button className="btn btn-sm btn-primary" onClick={handleSaveIdentite} disabled={saving}>
+                {saving ? '...' : 'Sauvegarder'}
+              </button>
             </div>
-            <div className="detail-page-field">
-              <label>Or max</label>
-              <input type="number" min={0} value={rewards.orMax}
-                onChange={e => setRewards(p => ({ ...p, orMax: Number(e.target.value) }))} />
-            </div>
-            {isInvocation && (
+            <div className="detail-page-fields">
               <div className="detail-page-field">
-                <label>PV Scaling (ex: 0.5)</label>
-                <input type="number" step={0.05} min={0} max={2} value={pvScaling}
-                  onChange={e => setPvScaling(Number(e.target.value))} />
+                <label>IA</label>
+                <select value={iaType} onChange={e => setIaType(e.target.value as IAType)}
+                  style={{ padding: '4px 8px', background: 'var(--bg-light)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontSize: 13 }}>
+                  {IA_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
               </div>
-            )}
-          </div>
-        </div>
-
-        {/* Résistances */}
-        <div className="detail-page-section">
-          <div className="detail-page-section-header">
-            <h3>Résistances</h3>
-            <button className="btn btn-sm btn-primary" onClick={handleSaveResistances} disabled={saving}>Sauvegarder</button>
-          </div>
-          <div className="detail-page-fields">
-            {([
-              ['Force', 'resistanceForce'],
-              ['Intelligence', 'resistanceIntelligence'],
-              ['Dextérité', 'resistanceDexterite'],
-              ['Agilité', 'resistanceAgilite'],
-            ] as [string, keyof typeof resistances][]).map(([label, key]) => (
-              <div key={key} className="detail-page-field">
-                <label>Résist. {label}</label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <input
-                    type="number" min={0} max={75} value={resistances[key]}
-                    onChange={e => setResistances(p => ({ ...p, [key]: Number(e.target.value) }))}
-                  />
-                  <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                    {Math.min(75, resistances[key])}% réd.
-                  </span>
+              <div className="detail-page-field" style={{ gridColumn: '1 / -1' }}>
+                <label>Image URL</label>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <input type="text" value={imageUrl} onChange={e => setImageUrl(e.target.value)}
+                    placeholder="Image URL..." style={{ flex: 1, fontSize: 13 }} />
+                  <button className="btn btn-sm btn-secondary" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
+                    {uploading ? '...' : '📁 Upload'}
+                  </button>
+                  {imageUrl && <img src={imageUrl} alt="preview" style={{ height: 36, borderRadius: 3, border: '1px solid var(--border)' }} />}
+                  <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }}
+                    onChange={async e => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      setUploading(true); setImageError('');
+                      try {
+                        const { url } = await uploadApi.entityImage(file, 'monsters');
+                        setImageUrl(url);
+                      } catch (err: any) {
+                        setImageError(err?.response?.data?.error || 'Erreur upload');
+                      } finally {
+                        setUploading(false); e.target.value = '';
+                      }
+                    }} />
                 </div>
+                {imageError && <span style={{ fontSize: 11, color: 'var(--danger)', marginTop: 4 }}>{imageError}</span>}
               </div>
-            ))}
+            </div>
           </div>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8 }}>
-            Valeur directement en % (0-75). Ex : 50 → 50% de réduction | 75 = cap max
-          </div>
-        </div>
+        )}
 
-        {/* Sprite */}
-        <div className="detail-page-section">
-          <div className="detail-page-section-header">
-            <h3>Sprite</h3>
-            <button className="btn btn-sm btn-primary" onClick={handleSaveSprite} disabled={savingSprite}>Sauvegarder</button>
+        {/* ── Onglet Stats ── */}
+        {activeTab === 'stats' && (<>
+          <div className="detail-page-section">
+            <div className="detail-page-section-header">
+              <h3>Stats</h3>
+              <button className="btn btn-sm btn-primary" onClick={handleSaveStats} disabled={saving}>
+                {saving ? '...' : 'Sauvegarder'}
+              </button>
+            </div>
+            <div className="detail-page-fields">
+              {(Object.entries(stats) as [keyof typeof stats, number][]).map(([key, val]) => (
+                <div key={key} className="detail-page-field">
+                  <label>{key}</label>
+                  <input type="number" value={val} min={0}
+                    onChange={e => setStats(p => ({ ...p, [key]: Number(e.target.value) }))} />
+                </div>
+              ))}
+            </div>
           </div>
-          <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-            {/* Preview */}
-            <div style={{ width: 120, height: 120, background: '#1a237e', border: '2px solid #4a5568', position: 'relative', overflow: 'visible', flexShrink: 0 }}>
-              {imageUrl ? (
-                <img
-                  src={imageUrl}
-                  alt=""
-                  style={{
+
+          <div className="detail-page-section">
+            <div className="detail-page-section-header">
+              <h3>Résistances</h3>
+              <button className="btn btn-sm btn-primary" onClick={handleSaveResistances} disabled={saving}>
+                {saving ? '...' : 'Sauvegarder'}
+              </button>
+            </div>
+            <div className="detail-page-fields">
+              {([
+                ['Force', 'resistanceForce'],
+                ['Intelligence', 'resistanceIntelligence'],
+                ['Dextérité', 'resistanceDexterite'],
+                ['Agilité', 'resistanceAgilite'],
+              ] as [string, keyof typeof resistances][]).map(([label, key]) => (
+                <div key={key} className="detail-page-field">
+                  <label>Résist. {label}</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <input type="number" min={0} max={75} value={resistances[key]}
+                      onChange={e => setResistances(p => ({ ...p, [key]: Number(e.target.value) }))} />
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                      {Math.min(75, resistances[key])}% réd.
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8 }}>
+              Valeur en % (0-75). Ex : 50 → 50% de réduction | 75 = cap max
+            </div>
+          </div>
+
+          <div className="detail-page-section">
+            <div className="detail-page-section-header">
+              <h3>{isInvocation ? 'Paramètres invocation' : 'Récompenses'}</h3>
+              <button className="btn btn-sm btn-primary" onClick={handleSaveRewards} disabled={saving}>
+                {saving ? '...' : 'Sauvegarder'}
+              </button>
+            </div>
+            <div className="detail-page-fields">
+              {!isInvocation && (
+                <div className="detail-page-field">
+                  <label>XP récompense</label>
+                  <input type="number" min={0} value={rewards.xpRecompense}
+                    onChange={e => setRewards(p => ({ ...p, xpRecompense: Number(e.target.value) }))} />
+                </div>
+              )}
+              <div className="detail-page-field">
+                <label>Or min</label>
+                <input type="number" min={0} value={rewards.orMin}
+                  onChange={e => setRewards(p => ({ ...p, orMin: Number(e.target.value) }))} />
+              </div>
+              <div className="detail-page-field">
+                <label>Or max</label>
+                <input type="number" min={0} value={rewards.orMax}
+                  onChange={e => setRewards(p => ({ ...p, orMax: Number(e.target.value) }))} />
+              </div>
+              {isInvocation && (
+                <div className="detail-page-field">
+                  <label>PV Scaling (ex: 0.5)</label>
+                  <input type="number" step={0.05} min={0} max={2} value={pvScaling}
+                    onChange={e => setPvScaling(Number(e.target.value))} />
+                </div>
+              )}
+            </div>
+          </div>
+        </>)}
+
+        {/* ── Onglet Visuel ── */}
+        {activeTab === 'visuel' && (<>
+          <div className="detail-page-section">
+            <div className="detail-page-section-header">
+              <h3>Ajustements sprite</h3>
+              <button className="btn btn-sm btn-primary" onClick={handleSaveSprite} disabled={savingSprite}>
+                {savingSprite ? '...' : 'Sauvegarder'}
+              </button>
+            </div>
+            <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+              {/* Preview */}
+              <div style={{ width: 120, height: 120, background: '#1a237e', border: '2px solid #4a5568', position: 'relative', overflow: 'visible', flexShrink: 0 }}>
+                {imageUrl ? (
+                  <img src={imageUrl} alt="" style={{
                     position: 'absolute',
                     bottom: `${spriteOffsetY}%`,
                     left: `calc(50% + ${spriteOffsetX}%)`,
@@ -387,87 +416,106 @@ const MonstreDetailPage: React.FC = () => {
                     width: 'auto',
                     objectFit: 'contain',
                     pointerEvents: 'none',
-                  }}
-                />
-              ) : (
-                <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: 11 }}>
-                  Aucune image
-                </span>
-              )}
-            </div>
-            {/* Controls */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Taille : {spriteScale.toFixed(2)}</div>
-                <div style={{ display: 'flex', gap: 4 }}>
-                  <button className="btn btn-sm" onClick={() => setSpriteScale(s => Math.max(0.1, Math.round((s - 0.05) * 100) / 100))} style={{ minWidth: 32 }}>−</button>
-                  <button className="btn btn-sm" onClick={() => setSpriteScale(s => Math.round((s + 0.05) * 100) / 100)} style={{ minWidth: 32 }}>+</button>
-                </div>
+                  }} />
+                ) : (
+                  <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: 11 }}>
+                    Aucune image
+                  </span>
+                )}
               </div>
-              <div>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>
-                  Position : X {spriteOffsetX > 0 ? '+' : ''}{spriteOffsetX.toFixed(0)}% / Y {spriteOffsetY > 0 ? '+' : ''}{spriteOffsetY.toFixed(0)}%
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '32px 32px 32px', gridTemplateRows: '32px 32px 32px', gap: 2 }}>
-                  <div />
-                  <button className="btn btn-sm" onClick={() => setSpriteOffsetY(y => Math.round((y + 2) * 10) / 10)} style={{ padding: 0 }}>↑</button>
-                  <div />
-                  <button className="btn btn-sm" onClick={() => setSpriteOffsetX(x => Math.round((x - 2) * 10) / 10)} style={{ padding: 0 }}>←</button>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <div style={{ width: 6, height: 6, background: 'var(--text-muted)', borderRadius: '50%' }} />
+              {/* Contrôles */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Taille : {spriteScale.toFixed(2)}</div>
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    <button className="btn btn-sm" onClick={() => setSpriteScale(s => Math.max(0.1, Math.round((s - 0.05) * 100) / 100))} style={{ minWidth: 32 }}>−</button>
+                    <button className="btn btn-sm" onClick={() => setSpriteScale(s => Math.round((s + 0.05) * 100) / 100)} style={{ minWidth: 32 }}>+</button>
                   </div>
-                  <button className="btn btn-sm" onClick={() => setSpriteOffsetX(x => Math.round((x + 2) * 10) / 10)} style={{ padding: 0 }}>→</button>
-                  <div />
-                  <button className="btn btn-sm" onClick={() => setSpriteOffsetY(y => Math.round((y - 2) * 10) / 10)} style={{ padding: 0 }}>↓</button>
-                  <div />
                 </div>
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>
+                    Position : X {spriteOffsetX > 0 ? '+' : ''}{spriteOffsetX.toFixed(0)}% / Y {spriteOffsetY > 0 ? '+' : ''}{spriteOffsetY.toFixed(0)}%
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '32px 32px 32px', gridTemplateRows: '32px 32px 32px', gap: 2 }}>
+                    <div />
+                    <button className="btn btn-sm" onClick={() => setSpriteOffsetY(y => Math.round((y + 2) * 10) / 10)} style={{ padding: 0 }}>↑</button>
+                    <div />
+                    <button className="btn btn-sm" onClick={() => setSpriteOffsetX(x => Math.round((x - 2) * 10) / 10)} style={{ padding: 0 }}>←</button>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <div style={{ width: 6, height: 6, background: 'var(--text-muted)', borderRadius: '50%' }} />
+                    </div>
+                    <button className="btn btn-sm" onClick={() => setSpriteOffsetX(x => Math.round((x + 2) * 10) / 10)} style={{ padding: 0 }}>→</button>
+                    <div />
+                    <button className="btn btn-sm" onClick={() => setSpriteOffsetY(y => Math.round((y - 2) * 10) / 10)} style={{ padding: 0 }}>↓</button>
+                    <div />
+                  </div>
+                </div>
+                <button className="btn btn-sm btn-secondary" onClick={() => { setSpriteScale(1); setSpriteOffsetX(0); setSpriteOffsetY(0); }}>↺ Réinitialiser</button>
               </div>
-              <button className="btn btn-sm btn-secondary" onClick={() => { setSpriteScale(1); setSpriteOffsetX(0); setSpriteOffsetY(0); }}>↺ Réinitialiser</button>
             </div>
           </div>
-        </div>
 
-        {/* Sorts */}
-        <div className="detail-page-section">
-          <div className="detail-page-section-header">
-            <h3>Sorts ({monstre.sorts?.length || 0})</h3>
+          <div className="detail-page-section">
+            <div className="detail-page-section-header">
+              <h3>Animations Spritesheet</h3>
+            </div>
+            <SpriteAnimEditor
+              label="Spritesheet Monstre"
+              sheetUrl={imageUrl}
+              config={monstreSpriteConfig}
+              onChange={cfg => setMonstreSpriteConfig(cfg)}
+              onSave={async cfg => {
+                if (!monstre) return;
+                await monstresApi.update(monstre.id, { spriteConfig: cfg });
+                setMonstreSpriteConfig(cfg);
+              }}
+              uploadType="monsters"
+            />
           </div>
-          <div className="sort-list" style={{ marginBottom: 10 }}>
-            {monstre.sorts && monstre.sorts.length > 0 ? (
-              [...monstre.sorts].sort((a, b) => a.priorite - b.priorite).map(ms => (
-                <div key={ms.id} className="sort-item">
-                  <div>
-                    <span className="sort-name">{ms.sort?.nom || `Sort #${ms.sortId}`}</span>
-                    {ms.sort && (
-                      <span className="sort-meta">
-                        <span>{ms.sort.coutPA} PA</span>
-                        <span>{ms.sort.degatsMin}-{ms.sort.degatsMax} dmg</span>
-                        <span>{ms.sort.porteeMin}-{ms.sort.porteeMax} PO</span>
-                        {ms.sort.estSoin && <span style={{ color: 'var(--success)' }}>Soin</span>}
-                      </span>
-                    )}
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span className="badge badge-info">P{ms.priorite}</span>
-                    <button className="btn btn-sm btn-danger" onClick={() => handleRemoveSort(ms.sortId)}>X</button>
-                  </div>
-                </div>
-              ))
-            ) : <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Aucun sort</div>}
-          </div>
-          <div className="inline-add">
-            <select value={addSortId} onChange={e => setAddSortId(Number(e.target.value))}>
-              <option value={0}>-- Sort --</option>
-              {allSorts.map(s => <option key={s.id} value={s.id}>{s.nom}</option>)}
-            </select>
-            <input type="number" value={addSortPrio} onChange={e => setAddSortPrio(Number(e.target.value))}
-              min={1} style={{ width: 60 }} placeholder="Prio" />
-            <button className="btn btn-sm btn-success" onClick={handleAddSort} disabled={!addSortId}>+ Ajouter</button>
-          </div>
-        </div>
+        </>)}
 
-        {/* Drops (ennemi uniquement) */}
-        {!isInvocation && (
+        {/* ── Onglet Combat (ennemi uniquement) ── */}
+        {activeTab === 'combat' && !isInvocation && (<>
+          {/* Sorts */}
+          <div className="detail-page-section">
+            <div className="detail-page-section-header">
+              <h3>Sorts ({monstre.sorts?.length || 0})</h3>
+            </div>
+            <div className="sort-list" style={{ marginBottom: 10 }}>
+              {monstre.sorts && monstre.sorts.length > 0 ? (
+                [...monstre.sorts].sort((a, b) => a.priorite - b.priorite).map(ms => (
+                  <div key={ms.id} className="sort-item">
+                    <div>
+                      <span className="sort-name">{ms.sort?.nom || `Sort #${ms.sortId}`}</span>
+                      {ms.sort && (
+                        <span className="sort-meta">
+                          <span>{ms.sort.coutPA} PA</span>
+                          <span>{ms.sort.degatsMin}-{ms.sort.degatsMax} dmg</span>
+                          <span>{ms.sort.porteeMin}-{ms.sort.porteeMax} PO</span>
+                          {ms.sort.estSoin && <span style={{ color: 'var(--success)' }}>Soin</span>}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span className="badge badge-info">P{ms.priorite}</span>
+                      <button className="btn btn-sm btn-danger" onClick={() => handleRemoveSort(ms.sortId)}>X</button>
+                    </div>
+                  </div>
+                ))
+              ) : <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Aucun sort</div>}
+            </div>
+            <div className="inline-add">
+              <select value={addSortId} onChange={e => setAddSortId(Number(e.target.value))}>
+                <option value={0}>-- Sort --</option>
+                {allSorts.map(s => <option key={s.id} value={s.id}>{s.nom}</option>)}
+              </select>
+              <input type="number" value={addSortPrio} onChange={e => setAddSortPrio(Number(e.target.value))}
+                min={1} style={{ width: 60 }} placeholder="Prio" />
+              <button className="btn btn-sm btn-success" onClick={handleAddSort} disabled={!addSortId}>+ Ajouter</button>
+            </div>
+          </div>
+
+          {/* Drops */}
           <div className="detail-page-section">
             <div className="detail-page-section-header">
               <h3>Drops ({monstre.drops?.length || 0})</h3>
@@ -478,10 +526,10 @@ const MonstreDetailPage: React.FC = () => {
                   <div key={d.id} className="sort-item">
                     <div>
                       <span className="sort-name">
-                        {d.ressource ? d.ressource.nom : d.equipement ? d.equipement.nom : '?'}
+                        {d.ressource ? d.ressource.nom : d.equipement ? d.equipement.nom : d.familierRace ? `🐾 ${d.familierRace.nom}` : '?'}
                       </span>
                       <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--text-muted)' }}>
-                        {d.ressource ? 'Ressource' : 'Equipement'} | {Math.round(d.tauxDrop * 100)}% | x{d.quantiteMin}-{d.quantiteMax}
+                        {d.ressource ? 'Ressource' : d.equipement ? 'Equipement' : d.familierRace ? 'Familier' : '?'} | {Math.round(d.tauxDrop * 100)}% | x{d.quantiteMin}-{d.quantiteMax}
                       </span>
                     </div>
                     <button className="btn btn-sm btn-danger" onClick={() => handleRemoveDrop(d.id)}>X</button>
@@ -490,13 +538,14 @@ const MonstreDetailPage: React.FC = () => {
               ) : <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Aucun drop</div>}
             </div>
             <div className="inline-add" style={{ flexWrap: 'wrap' }}>
-              <select value={dropType} onChange={e => { setDropType(e.target.value as 'ressource' | 'equipement'); setDropTargetId(0); }}>
+              <select value={dropType} onChange={e => { setDropType(e.target.value as 'ressource' | 'equipement' | 'familier'); setDropTargetId(0); }}>
                 <option value="ressource">Ressource</option>
                 <option value="equipement">Equipement</option>
+                <option value="familier">🐾 Familier</option>
               </select>
               <select value={dropTargetId} onChange={e => setDropTargetId(Number(e.target.value))}>
                 <option value={0}>-- Choisir --</option>
-                {(dropType === 'ressource' ? allResources : allEquipment).map(item => (
+                {(dropType === 'ressource' ? allResources : dropType === 'equipement' ? allEquipment : allFamilierRaces).map(item => (
                   <option key={item.id} value={item.id}>{item.nom}</option>
                 ))}
               </select>
@@ -509,10 +558,8 @@ const MonstreDetailPage: React.FC = () => {
               <button className="btn btn-sm btn-success" onClick={handleAddDrop} disabled={!dropTargetId}>+ Ajouter</button>
             </div>
           </div>
-        )}
 
-        {/* Régions (ennemi uniquement) */}
-        {!isInvocation && (
+          {/* Régions */}
           <div className="detail-page-section">
             <div className="detail-page-section-header">
               <h3>Régions ({monstre.regions?.length || 0})</h3>
@@ -542,7 +589,8 @@ const MonstreDetailPage: React.FC = () => {
               <button className="btn btn-sm btn-success" onClick={handleAddRegion} disabled={!addRegionId}>+ Ajouter</button>
             </div>
           </div>
-        )}
+        </>)}
+
       </div>
 
       <ConfirmDialog

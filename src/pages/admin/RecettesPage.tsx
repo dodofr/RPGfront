@@ -4,7 +4,8 @@ import FormModal, { type FieldDef } from '../../components/FormModal';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { useCrud } from '../../hooks/useCrud';
 import { recipesAdminApi, equipmentApi, resourcesApi } from '../../api/static';
-import type { Recette, Equipment, Ressource } from '../../types';
+import { metiersApi } from '../../api/metiers';
+import type { Recette, Equipment, Ressource, Metier } from '../../types';
 import '../../styles/admin.css';
 
 const RecettesPage: React.FC = () => {
@@ -15,13 +16,15 @@ const RecettesPage: React.FC = () => {
   const [selected, setSelected] = useState<Recette | null>(null);
   const [allEquipment, setAllEquipment] = useState<Equipment[]>([]);
   const [allResources, setAllResources] = useState<Ressource[]>([]);
+  const [allMetiers, setAllMetiers] = useState<Metier[]>([]);
   const [addResId, setAddResId] = useState<number>(0);
   const [addResQty, setAddResQty] = useState<number>(1);
 
   useEffect(() => {
-    Promise.all([equipmentApi.getAll(), resourcesApi.getAll()]).then(([eqs, res]) => {
+    Promise.all([equipmentApi.getAll(), resourcesApi.getAll(), metiersApi.getAll()]).then(([eqs, res, mets]) => {
       setAllEquipment(eqs);
       setAllResources(res);
+      setAllMetiers(mets);
     });
   }, []);
 
@@ -36,6 +39,15 @@ const RecettesPage: React.FC = () => {
     { key: 'equipement', header: 'Resultat', render: (item) => item.equipement?.nom ?? `#${item.equipementId}` },
     { key: 'niveauMinimum', header: 'Niveau min' },
     { key: 'coutOr', header: 'Or' },
+    {
+      key: 'metier',
+      header: 'Métier requis',
+      render: (item) => item.metier
+        ? <span style={{ fontSize: 12, padding: '2px 6px', borderRadius: 10, background: 'var(--accent)', color: '#fff' }}>
+            {item.metier.nom} niv.{item.niveauMetierRequis ?? 1}
+          </span>
+        : <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>Libre</span>,
+    },
     { key: 'ingredients', header: 'Ingredients', render: (item) =>
       item.ingredients && item.ingredients.length > 0
         ? item.ingredients.map(ing => `${ing.quantite}x ${ing.ressource?.nom ?? `#${ing.ressourceId}`}`).join(', ')
@@ -55,6 +67,14 @@ const RecettesPage: React.FC = () => {
     },
     { name: 'niveauMinimum', label: 'Niveau minimum', type: 'number', defaultValue: 1, min: 1 },
     { name: 'coutOr', label: 'Cout en or', type: 'number', defaultValue: 0, min: 0 },
+    {
+      name: 'metierId',
+      label: 'Métier requis',
+      type: 'select',
+      options: [{ value: '', label: '— Aucun —' }, ...allMetiers.map(m => ({ value: m.id, label: m.nom }))],
+    },
+    { name: 'niveauMetierRequis', label: 'Niveau métier requis', type: 'number', defaultValue: 1, min: 1 },
+    { name: 'xpCraft', label: 'XP craft gagné', type: 'number', defaultValue: 10, min: 0 },
   ];
 
   const handleAddIngredient = async () => {
@@ -113,6 +133,20 @@ const RecettesPage: React.FC = () => {
                   <span className="stat-label">Cout or</span>
                   <span className="stat-value">{selected.coutOr}</span>
                 </div>
+                <div className="stat-row">
+                  <span className="stat-label">Métier requis</span>
+                  <span className="stat-value">
+                    {selected.metier
+                      ? `${selected.metier.nom} niv.${selected.niveauMetierRequis ?? 1}`
+                      : 'Aucun (libre)'}
+                  </span>
+                </div>
+                {selected.metier && (
+                  <div className="stat-row">
+                    <span className="stat-label">XP craft</span>
+                    <span className="stat-value">+{selected.xpCraft ?? 10} XP</span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -163,8 +197,10 @@ const RecettesPage: React.FC = () => {
         fields={fields}
         initialValues={editing || undefined}
         onSubmit={async (vals) => {
-          if (editing) await update(editing.id, vals);
-          else await create(vals);
+          // Convert empty string metierId to null
+          const data = { ...vals, metierId: vals.metierId === '' || vals.metierId === 0 ? null : vals.metierId };
+          if (editing) await update(editing.id, data);
+          else await create(data);
           setShowForm(false);
         }}
         onCancel={() => setShowForm(false)}

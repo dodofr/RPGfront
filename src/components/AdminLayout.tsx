@@ -9,6 +9,8 @@ const adminLinks = [
   { to: '/admin/passives', label: 'Passives', desc: 'Compétences passives par niveau' },
   { to: '/admin/pnj', label: 'PNJ', desc: 'Marchands et PNJ de map' },
   { to: '/admin/quetes', label: 'Quêtes', desc: 'Quêtes multi-étapes et récompenses' },
+  { to: '/admin/metiers', label: 'Métiers', desc: 'Métiers de récolte, nœuds, table de loot' },
+  { to: '/admin/familiers', label: 'Familiers', desc: 'Familles, races, croisements' },
   { to: '/admin/import', label: 'Import', desc: 'Import en masse par fichier JSON' },
 ];
 

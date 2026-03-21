@@ -2,7 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { equipmentApi, zonesApi, setsApi, resourcesApi, recipesAdminApi } from '../../api/static';
-import type { Equipment, Zone, Panoplie, Recette, Ressource, StatType, SlotType, LigneDegatsArme } from '../../types';
+import { metiersApi } from '../../api/metiers';
+import type { Equipment, Zone, Panoplie, Recette, Ressource, StatType, SlotType, LigneDegatsArme, Metier } from '../../types';
 import '../../styles/admin.css';
 
 const STAT_OPTIONS: { value: StatType; label: string }[] = [
@@ -37,6 +38,10 @@ const EquipementDetailPage: React.FC = () => {
   const [recetteNom, setRecetteNom] = useState('');
   const [recetteNiveau, setRecetteNiveau] = useState(1);
   const [recetteOr, setRecetteOr] = useState(0);
+  const [recetteMetierId, setRecetteMetierId] = useState<number | null>(null);
+  const [recetteNiveauMetier, setRecetteNiveauMetier] = useState(1);
+  const [recetteXpCraft, setRecetteXpCraft] = useState(10);
+  const [allMetiers, setAllMetiers] = useState<Metier[]>([]);
   const [savingRecette, setSavingRecette] = useState(false);
   const [addIngredientId, setAddIngredientId] = useState<number>(0);
   const [addIngredientQty, setAddIngredientQty] = useState<number>(1);
@@ -103,6 +108,9 @@ const EquipementDetailPage: React.FC = () => {
       setRecetteNom(found.nom);
       setRecetteNiveau(found.niveauMinimum);
       setRecetteOr(found.coutOr);
+      setRecetteMetierId(found.metierId ?? null);
+      setRecetteNiveauMetier(found.niveauMetierRequis ?? 1);
+      setRecetteXpCraft(found.xpCraft ?? 10);
     }
   }, []);
 
@@ -154,6 +162,7 @@ const EquipementDetailPage: React.FC = () => {
     zonesApi.getAll().then(setZones);
     setsApi.getAll().then(setPanoplies);
     resourcesApi.getAll().then(setAllResources);
+    metiersApi.getAll().then(setAllMetiers);
   }, [load]);
 
   const handleSaveBase = async () => {
@@ -205,10 +214,15 @@ const EquipementDetailPage: React.FC = () => {
   const handleSaveRecette = async () => {
     if (!equip) return;
     setSavingRecette(true);
+    const metierData = {
+      metierId: recetteMetierId || null,
+      niveauMetierRequis: recetteNiveauMetier,
+      xpCraft: recetteXpCraft,
+    };
     if (recette) {
-      await recipesAdminApi.update(recette.id, { nom: recetteNom, niveauMinimum: recetteNiveau, coutOr: recetteOr });
+      await recipesAdminApi.update(recette.id, { nom: recetteNom, niveauMinimum: recetteNiveau, coutOr: recetteOr, ...metierData });
     } else {
-      await recipesAdminApi.create({ nom: recetteNom || equip.nom, equipementId: equip.id, niveauMinimum: recetteNiveau, coutOr: recetteOr });
+      await recipesAdminApi.create({ nom: recetteNom || equip.nom, equipementId: equip.id, niveauMinimum: recetteNiveau, coutOr: recetteOr, ...metierData });
     }
     await loadRecette(equip.id);
     setSavingRecette(false);
@@ -479,6 +493,21 @@ const EquipementDetailPage: React.FC = () => {
                   <label>Coût en or</label>
                   <input type="number" min={0} value={recetteOr} onChange={e => setRecetteOr(Number(e.target.value))} />
                 </div>
+                <div className="detail-page-field">
+                  <label>Métier requis</label>
+                  <select value={recetteMetierId ?? ''} onChange={e => setRecetteMetierId(e.target.value === '' ? null : Number(e.target.value))}>
+                    <option value="">— Aucun —</option>
+                    {allMetiers.map(m => <option key={m.id} value={m.id}>{m.nom}</option>)}
+                  </select>
+                </div>
+                <div className="detail-page-field">
+                  <label>Niv. métier requis</label>
+                  <input type="number" min={1} value={recetteNiveauMetier} onChange={e => setRecetteNiveauMetier(Number(e.target.value))} />
+                </div>
+                <div className="detail-page-field">
+                  <label>XP craft gagné</label>
+                  <input type="number" min={0} value={recetteXpCraft} onChange={e => setRecetteXpCraft(Number(e.target.value))} />
+                </div>
               </div>
               <button className="btn btn-sm btn-success" onClick={handleSaveRecette} disabled={savingRecette}>
                 + Créer la recette
@@ -498,6 +527,21 @@ const EquipementDetailPage: React.FC = () => {
                 <div className="detail-page-field">
                   <label>Coût en or</label>
                   <input type="number" min={0} value={recetteOr} onChange={e => setRecetteOr(Number(e.target.value))} />
+                </div>
+                <div className="detail-page-field">
+                  <label>Métier requis</label>
+                  <select value={recetteMetierId ?? ''} onChange={e => setRecetteMetierId(e.target.value === '' ? null : Number(e.target.value))}>
+                    <option value="">— Aucun —</option>
+                    {allMetiers.map(m => <option key={m.id} value={m.id}>{m.nom}</option>)}
+                  </select>
+                </div>
+                <div className="detail-page-field">
+                  <label>Niv. métier requis</label>
+                  <input type="number" min={1} value={recetteNiveauMetier} onChange={e => setRecetteNiveauMetier(Number(e.target.value))} />
+                </div>
+                <div className="detail-page-field">
+                  <label>XP craft gagné</label>
+                  <input type="number" min={0} value={recetteXpCraft} onChange={e => setRecetteXpCraft(Number(e.target.value))} />
                 </div>
               </div>
               <button className="btn btn-sm btn-primary" style={{ marginBottom: 12 }} onClick={handleSaveRecette} disabled={savingRecette}>

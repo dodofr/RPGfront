@@ -17,6 +17,7 @@ const zoneDescriptions: Record<string, string> = {
   CARRE: 'Carré plein centré sur la cible',
   ANNEAU: 'Anneau creux (bordure du cercle) autour de la cible',
   CONE_INVERSE: 'Cône qui s\'élargit vers le lanceur',
+  T_FORME: 'T — ligne perpendiculaire + 1 case dans la direction de lancer',
 };
 
 const ZonesPage: React.FC = () => {
@@ -55,6 +56,7 @@ const ZonesPage: React.FC = () => {
         { value: 'ANNEAU', label: 'Anneau — bordure du cercle uniquement' },
         { value: 'DIAGONALE', label: 'Diagonale — croix NE/NO/SE/SO' },
         { value: 'CARRE', label: 'Carré — zone pleine carrée' },
+        { value: 'T_FORME', label: 'Forme en T — ligne perp. + 1 case avant' },
       ],
     },
     { name: 'taille', label: 'Taille', type: 'number', required: true, min: 0, defaultValue: 1 },

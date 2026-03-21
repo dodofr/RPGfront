@@ -1,5 +1,5 @@
 import api from './client';
-import type { Region, GameMap, MonsterTemplate, MonstreDrop, MapCase, MapSpawn, MapConnection } from '../types';
+import type { Region, GameMap, MonsterTemplate, MonstreDrop, MapCase, MapSpawn, MapConnection, MapRessource } from '../types';
 
 export const regionsApi = {
   getAll: () => api.get<Region[]>('/regions').then(r => r.data),
@@ -35,6 +35,12 @@ export const mapsApi = {
     api.put(`/maps/${mapId}/grid/spawns`, { spawns }).then(r => r.data),
   updateWorldPositions: (positions: { mapId: number; worldX: number; worldY: number }[]) =>
     api.put<GameMap[]>('/maps/world-positions', { positions }).then(r => r.data),
+  getRessources: (mapId: number) =>
+    api.get<MapRessource[]>(`/maps/${mapId}/ressources`).then(r => r.data),
+  addRessource: (mapId: number, data: { noeudId: number; caseX: number; caseY: number; respawnMinutes?: number }) =>
+    api.post<MapRessource>(`/maps/${mapId}/ressources`, data).then(r => r.data),
+  removeRessource: (mapId: number, ressourceId: number) =>
+    api.delete(`/maps/${mapId}/ressources/${ressourceId}`),
 };
 
 export const uploadApi = {

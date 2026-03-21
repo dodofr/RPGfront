@@ -1,17 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { SPRITE_CONFIG, type SpriteAnimState } from '../utils/spriteConfig';
+import { SPRITE_CONFIG, type SpriteAnimState, type SpritesheetConfig } from '../utils/spriteConfig';
 
 interface SpriteAnimatorProps {
   imageUrl: string | null | undefined;
   animState: SpriteAnimState;
   displayHeight: number; // px
   style?: React.CSSProperties;
+  configOverride?: SpritesheetConfig | null;
 }
 
-const SpriteAnimator: React.FC<SpriteAnimatorProps> = ({ imageUrl, animState, displayHeight, style }) => {
+const SpriteAnimator: React.FC<SpriteAnimatorProps> = ({ imageUrl, animState, displayHeight, style, configOverride }) => {
   const [frameIdx, setFrameIdx] = useState(0);
 
-  const config = imageUrl ? SPRITE_CONFIG[imageUrl] : undefined;
+  const config = configOverride ?? (imageUrl ? SPRITE_CONFIG[imageUrl] : undefined);
 
   useEffect(() => {
     if (!config) return;
